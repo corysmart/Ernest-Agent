@@ -1,0 +1,39 @@
+import { AnthropicAdapter } from '../../llm/adapters/anthropic-adapter';
+
+const fetchMock = jest.fn();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  (global as any).fetch = fetchMock;
+});
+
+describe('AnthropicAdapter', () => {
+  it('calls messages endpoint and parses content', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ text: 'hello' }], usage: { input_tokens: 2, output_tokens: 3 } })
+    });
+
+    const adapter = new AnthropicAdapter({
+      apiKey: 'key',
+      model: 'claude-test',
+      baseUrl: 'https://api.anthropic.com/v1'
+    });
+
+    const result = await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+    expect(result.content).toBe('hello');
+  });
+
+  it('rejects unsafe base URL', () => {
+    expect(() => new AnthropicAdapter({
+      apiKey: 'key',
+      model: 'claude-test',
+      baseUrl: 'http://127.0.0.1'
+    })).toThrow('Unsafe Anthropic base URL');
+  });
+
+  it('rejects embedding when not configured', async () => {
+    const adapter = new AnthropicAdapter({ apiKey: 'key', model: 'claude-test', baseUrl: 'https://api.anthropic.com/v1' });
+    await expect(adapter.embed('text')).rejects.toThrow('Anthropic embeddings not configured');
+  });
+});

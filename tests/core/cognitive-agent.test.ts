@@ -1,0 +1,140 @@
+import { CognitiveAgent } from '../../core/agent/cognitive-agent';
+import type { Environment } from '../../env/environment';
+import type { MemoryManager } from '../../memory/memory-manager';
+import type { WorldModel } from '../../world/world-model';
+import type { GoalStack } from '../../goals/goal-stack';
+import type { Planner } from '../../goals/planner';
+import type { LLMAdapter } from '../../core/contracts/llm';
+import type { PromptInjectionFilter, OutputValidator, ToolPermissionGate } from '../../core/contracts/security';
+import { SelfModel } from '../../self/self-model';
+
+const observation = { timestamp: 1, state: { status: 'ok' } };
+
+function buildAgent(overrides: Partial<{
+  environment: Environment;
+  memoryManager: MemoryManager;
+  worldModel: WorldModel;
+  goalStack: GoalStack;
+  planner: Planner;
+  llmAdapter: LLMAdapter;
+  promptFilter: PromptInjectionFilter;
+  outputValidator: OutputValidator<any>;
+  permissionGate: ToolPermissionGate;
+}> = {}) {
+  const environment: Environment = overrides.environment ?? {
+    observe: async () => observation,
+    act: async () => ({ success: true })
+  };
+
+  const memoryManager: MemoryManager = overrides.memoryManager ?? ({
+    addEpisodic: async () => {},
+    addSemantic: async () => {},
+    addProcedural: async () => {},
+    query: async () => [],
+    injectForPrompt: async () => 'memory'
+  } as unknown as MemoryManager);
+
+  const worldModel: WorldModel = overrides.worldModel ?? {
+    update: () => ({ timestamp: 1, facts: { status: 'ok' }, uncertainty: 0.2 }),
+    simulate: (state, action) => ({ action, expectedState: state, uncertainty: 0.2, score: 0.8 }),
+    updateFromResult: (state) => state
+  };
+
+  const goalStack: GoalStack = overrides.goalStack ?? ({
+    addGoal: () => {},
+    updateStatus: () => {},
+    resolveNextGoal: () => ({
+      id: 'g1',
+      title: 'Recover',
+      priority: 5,
+      status: 'active',
+      horizon: 'short',
+      createdAt: 1,
+      updatedAt: 1
+    }),
+    listGoals: () => []
+  } as unknown as GoalStack);
+
+  const planner: Planner = overrides.planner ?? {
+    plan: () => ({
+      id: 'p1',
+      goalId: 'g1',
+      createdAt: 1,
+      steps: [{ id: 's1', description: 'Act', action: { type: 'recover' } }]
+    })
+  } as Planner;
+
+  const llmAdapter: LLMAdapter = overrides.llmAdapter ?? {
+    generate: async () => ({ content: '{"actionType":"recover","actionPayload":{},"confidence":0.8}', tokensUsed: 10 }),
+    embed: async () => [1, 0],
+    estimateCost: () => 0
+  };
+
+  const promptFilter: PromptInjectionFilter = overrides.promptFilter ?? {
+    sanitize: (input: string) => ({ sanitized: input, flagged: false, reasons: [] })
+  };
+
+  const outputValidator: OutputValidator<any> = overrides.outputValidator ?? {
+    validate: (output: string) => ({ success: true, data: JSON.parse(output) })
+  };
+
+  const permissionGate: ToolPermissionGate = overrides.permissionGate ?? {
+    isAllowed: () => ({ allowed: true })
+  };
+
+  return new CognitiveAgent({
+    environment,
+    memoryManager,
+    worldModel,
+    selfModel: new SelfModel(),
+    goalStack,
+    planner,
+    llmAdapter,
+    promptFilter,
+    outputValidator,
+    permissionGate
+  });
+}
+
+describe('CognitiveAgent', () => {
+  it('runs one loop and acts on validated decision', async () => {
+    const agent = buildAgent();
+
+    const result = await agent.runOnce();
+
+    expect(result.status).toBe('completed');
+    expect(result.decision?.actionType).toBe('recover');
+    expect(result.actionResult?.success).toBe(true);
+  });
+
+  it('blocks invalid LLM output', async () => {
+    const agent = buildAgent({
+      outputValidator: { validate: () => ({ success: false, errors: ['invalid'] }) }
+    });
+
+    const result = await agent.runOnce();
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('invalid');
+  });
+
+  it('sanitizes prompt inputs', async () => {
+    let sanitizedInput = '';
+    const agent = buildAgent({
+      promptFilter: {
+        sanitize: (input: string) => {
+          sanitizedInput = input.replace('attack', '');
+          return { sanitized: sanitizedInput, flagged: true, reasons: ['prompt-injection'] };
+        }
+      },
+      environment: {
+        observe: async () => ({ timestamp: 1, state: { status: 'attack' } }),
+        act: async () => ({ success: true })
+      }
+    });
+
+    await agent.runOnce();
+
+    expect(sanitizedInput).not.toContain('attack');
+  });
+});
