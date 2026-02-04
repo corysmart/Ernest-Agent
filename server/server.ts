@@ -8,8 +8,9 @@ import { RuleBasedWorldModel } from '../world/world-model';
 import { SelfModel } from '../self/self-model';
 import { GoalStack } from '../goals/goal-stack';
 import { HeuristicPlanner } from '../goals/planner';
-import type { MemoryManager, IMemoryManager } from '../memory/memory-manager';
+import type { MemoryManager } from '../memory/memory-manager';
 import { ScopedMemoryManager } from '../memory/scoped-memory-manager';
+import { StructuredAuditLogger } from '../security/audit-logger';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/security';
 import type { AgentDecision } from '../core/contracts/agent';
@@ -70,6 +71,10 @@ export async function buildServer() {
     const requestId = tenantId ?? `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId);
     
+    // Create audit logger for this request
+    const auditLogger = new StructuredAuditLogger();
+    
+    // Create scoped goal stack for tenant isolation (already per-request)
     const goalStack = new GoalStack();
     if (goal) {
       try {
@@ -89,7 +94,11 @@ export async function buildServer() {
       timestamp: observation.timestamp ?? Date.now(),
       state: observation.state,
       events: observation.events
-    }, toolRunner);
+    }, toolRunner, {
+      auditLogger,
+      tenantId: tenantId,
+      requestId
+    });
 
     const worldModel = new RuleBasedWorldModel();
     const selfModel = new SelfModel();
@@ -105,7 +114,10 @@ export async function buildServer() {
       llmAdapter: container.resolve<LLMAdapter>('llmAdapter'),
       promptFilter: container.resolve<PromptInjectionFilter>('promptFilter'),
       outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),
-      permissionGate: container.resolve<ToolPermissionGate>('permissionGate')
+      permissionGate: container.resolve<ToolPermissionGate>('permissionGate'),
+      auditLogger,
+      tenantId: tenantId,
+      requestId
     });
 
     const result = await agent.runOnce();

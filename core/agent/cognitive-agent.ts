@@ -9,6 +9,7 @@ import type { GoalStack } from '../../goals/goal-stack';
 import type { Planner } from '../../goals/planner';
 import type { SelfModel } from '../../self/self-model';
 import type { GoalReference } from '../../memory/types';
+import type { StructuredAuditLogger } from '../../security/audit-logger';
 
 interface CognitiveAgentOptions {
   environment: Environment;
@@ -21,6 +22,9 @@ interface CognitiveAgentOptions {
   promptFilter: PromptInjectionFilter;
   outputValidator: OutputValidator<AgentDecision>;
   permissionGate: ToolPermissionGate;
+  auditLogger?: StructuredAuditLogger;
+  tenantId?: string;
+  requestId?: string;
 }
 
 export class CognitiveAgent {
@@ -90,7 +94,34 @@ export class CognitiveAgent {
         temperature: 0.2
       };
 
-      const response = await this.options.llmAdapter.generate(request);
+      // Log LLM request
+      const llmProvider = this.options.llmAdapter.constructor.name.replace('Adapter', '').toLowerCase();
+      let response;
+      try {
+        response = await this.options.llmAdapter.generate(request);
+        
+        // Log successful LLM request
+        this.options.auditLogger?.logLLMRequest({
+          tenantId: this.options.tenantId,
+          requestId: this.options.requestId,
+          provider: llmProvider,
+          model: 'unknown', // Adapters don't expose model name easily
+          tokensUsed: response.tokensUsed,
+          success: true
+        });
+      } catch (llmError) {
+        // Log LLM request failure
+        this.options.auditLogger?.logLLMRequest({
+          tenantId: this.options.tenantId,
+          requestId: this.options.requestId,
+          provider: llmProvider,
+          model: 'unknown',
+          success: false,
+          error: llmError instanceof Error ? llmError.message : 'Unknown error'
+        });
+        throw llmError;
+      }
+
       transition('validate_output');
       const validated = this.options.outputValidator.validate(response.content);
 
@@ -104,6 +135,20 @@ export class CognitiveAgent {
         transition('error');
         return { status: 'error', error: 'Decision missing actionType', stateTrace };
       }
+
+      // Log agent decision
+      this.options.auditLogger?.logAgentDecision({
+        tenantId: this.options.tenantId,
+        requestId: this.options.requestId,
+        decision: {
+          actionType: decision.actionType,
+          actionPayload: decision.actionPayload,
+          confidence: decision.confidence,
+          reasoning: decision.reasoning
+        },
+        goalId: goal.id,
+        stateTrace
+      });
 
       const action = { type: decision.actionType, payload: decision.actionPayload };
       const permission = this.options.permissionGate.isAllowed(action, { goalId: goal.id });
@@ -139,6 +184,12 @@ export class CognitiveAgent {
       };
     } catch (error) {
       transition('error');
+      this.options.auditLogger?.logError({
+        tenantId: this.options.tenantId,
+        requestId: this.options.requestId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        context: { stateTrace }
+      });
       return {
         status: 'error',
         error: error instanceof Error ? error.message : 'Unknown error',

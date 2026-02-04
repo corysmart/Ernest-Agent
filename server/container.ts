@@ -17,7 +17,6 @@ import { AnthropicAdapter } from '../llm/adapters/anthropic-adapter';
 import { LocalLLMAdapter } from '../llm/adapters/local-adapter';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { EmbeddingProvider } from '../memory/memory-manager';
-import { isSafeUrl } from '../security/ssrf-protection';
 
 export interface ContainerContext {
   container: Container;

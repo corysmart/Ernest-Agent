@@ -2,6 +2,9 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
+// Store DNS validation result to avoid re-validating on every request
+let cachedDnsValidation: { url: string; isValid: boolean } | null = null;
+
 interface AnthropicEmbeddingConfig {
   apiKey: string;
   baseUrl: string;
@@ -99,7 +102,17 @@ export class AnthropicAdapter implements LLMAdapter {
       system
     };
 
-    const response = await fetchWithTimeout(`${trimSlash(this.baseUrl)}/messages`, {
+    // Validate URL before making request to prevent DNS rebinding attacks
+    const requestUrl = `${trimSlash(this.baseUrl)}/messages`;
+    if (cachedDnsValidation?.url !== this.baseUrl) {
+      const isSafe = await isSafeUrl(this.baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+      }
+      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+    }
+
+    const response = await fetchWithTimeout(requestUrl, {
       method: 'POST',
       headers: buildHeaders(this.apiKey, this.anthropicVersion),
       body: JSON.stringify(payload)
@@ -137,7 +150,17 @@ export class AnthropicAdapter implements LLMAdapter {
       throw new Error('Anthropic embeddings not configured');
     }
 
-    const response = await fetchWithTimeout(`${trimSlash(this.embedding.baseUrl)}/embeddings`, {
+    // Validate URL before making request to prevent DNS rebinding attacks
+    const requestUrl = `${trimSlash(this.embedding.baseUrl)}/embeddings`;
+    if (cachedDnsValidation?.url !== this.embedding.baseUrl) {
+      const isSafe = await isSafeUrl(this.embedding.baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe URL detected: ${this.embedding.baseUrl} resolves to private IP`);
+      }
+      cachedDnsValidation = { url: this.embedding.baseUrl, isValid: true };
+    }
+
+    const response = await fetchWithTimeout(requestUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.embedding.apiKey}`,

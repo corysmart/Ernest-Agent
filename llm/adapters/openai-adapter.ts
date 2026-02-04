@@ -2,6 +2,9 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
+// Store DNS validation result to avoid re-validating on every request
+let cachedDnsValidation: { url: string; isValid: boolean } | null = null;
+
 interface OpenAIAdapterOptions {
   apiKey: string;
   model: string;
@@ -66,6 +69,16 @@ export class OpenAIAdapter implements LLMAdapter {
       throw new Error('Prompt messages are required');
     }
 
+    // Validate URL before making request to prevent DNS rebinding attacks
+    const requestUrl = `${trimSlash(this.baseUrl)}/chat/completions`;
+    if (cachedDnsValidation?.url !== this.baseUrl) {
+      const isSafe = await isSafeUrl(this.baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+      }
+      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+    }
+
     const payload = {
       model: this.model,
       messages: input.messages.map(toChatMessage),
@@ -73,7 +86,7 @@ export class OpenAIAdapter implements LLMAdapter {
       temperature: input.temperature ?? 0.2
     };
 
-    const response = await fetchWithTimeout(`${trimSlash(this.baseUrl)}/chat/completions`, {
+    const response = await fetchWithTimeout(requestUrl, {
       method: 'POST',
       headers: buildHeaders(this.apiKey, this.organization),
       body: JSON.stringify(payload)
@@ -102,12 +115,22 @@ export class OpenAIAdapter implements LLMAdapter {
       throw new Error('Embedding text required');
     }
 
+    // Validate URL before making request to prevent DNS rebinding attacks
+    const requestUrl = `${trimSlash(this.baseUrl)}/embeddings`;
+    if (cachedDnsValidation?.url !== this.baseUrl) {
+      const isSafe = await isSafeUrl(this.baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+      }
+      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+    }
+
     const payload = {
       model: this.embeddingModel,
       input: text
     };
 
-    const response = await fetchWithTimeout(`${trimSlash(this.baseUrl)}/embeddings`, {
+    const response = await fetchWithTimeout(requestUrl, {
       method: 'POST',
       headers: buildHeaders(this.apiKey, this.organization),
       body: JSON.stringify(payload)
