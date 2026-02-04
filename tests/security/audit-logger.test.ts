@@ -1,4 +1,4 @@
-import { StructuredAuditLogger, ConsoleAuditLogger } from '../../security/audit-logger';
+import { StructuredAuditLogger } from '../../security/audit-logger';
 
 describe('Audit Logger', () => {
   let logger: StructuredAuditLogger;

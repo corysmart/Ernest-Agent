@@ -20,6 +20,7 @@ export class LocalLLMAdapter implements LLMAdapter {
   private readonly embedPath: string;
   private readonly timeoutMs: number;
   private readonly costPerToken: number;
+  private readonly allowlist?: string[];
 
   constructor(options: LocalAdapterOptions) {
     this.baseUrl = options.baseUrl;
@@ -27,6 +28,7 @@ export class LocalLLMAdapter implements LLMAdapter {
     this.embedPath = options.embedPath ?? '/embed';
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
+    this.allowlist = options.allowlist;
 
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
@@ -61,12 +63,16 @@ export class LocalLLMAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}${this.generatePath}`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    const cacheKey = `${this.baseUrl}:${this.allowlist?.join(',') ?? 'none'}`;
+    if (cachedDnsValidation?.url !== cacheKey) {
+      // If allowlist is provided, skip DNS validation (allowlist bypasses DNS check)
+      if (!this.allowlist || this.allowlist.length === 0) {
+        const isSafe = await isSafeUrl(this.baseUrl);
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+      cachedDnsValidation = { url: cacheKey, isValid: true };
     }
 
     const response = await fetchWithTimeout(requestUrl, {
@@ -105,12 +111,16 @@ export class LocalLLMAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}${this.embedPath}`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    const cacheKey = `${this.baseUrl}:${this.allowlist?.join(',') ?? 'none'}`;
+    if (cachedDnsValidation?.url !== cacheKey) {
+      // If allowlist is provided, skip DNS validation (allowlist bypasses DNS check)
+      if (!this.allowlist || this.allowlist.length === 0) {
+        const isSafe = await isSafeUrl(this.baseUrl);
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+      cachedDnsValidation = { url: cacheKey, isValid: true };
     }
 
     const response = await fetchWithTimeout(requestUrl, {
