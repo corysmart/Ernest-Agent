@@ -2,6 +2,9 @@ import type { LLMAdapter, LLMResponse, PromptRequest } from '../../core/contract
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
+// Symbol to mark factory-created instances (prevents direct constructor usage)
+const FACTORY_CREATED = Symbol('factory-created');
+
 // Store DNS validation result with TTL to prevent DNS rebinding window
 interface CachedDnsValidation {
   isValid: boolean;
@@ -29,9 +32,13 @@ export class LocalLLMAdapter implements LLMAdapter {
   private readonly allowlist?: string[];
 
   /**
-   * @deprecated Use LocalLLMAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   * Private constructor. Use LocalLLMAdapter.create() instead to ensure DNS rebinding protection.
    */
-  constructor(options: LocalAdapterOptions) {
+  private constructor(options: LocalAdapterOptions & { [FACTORY_CREATED]?: boolean }) {
+    // Enforce factory pattern - constructor can only be called from create()
+    if (!options[FACTORY_CREATED]) {
+      throw new Error('LocalLLMAdapter constructor is private. Use LocalLLMAdapter.create() instead.');
+    }
     this.baseUrl = options.baseUrl;
     this.generatePath = options.generatePath ?? '/generate';
     this.embedPath = options.embedPath ?? '/embed';
@@ -42,9 +49,6 @@ export class LocalLLMAdapter implements LLMAdapter {
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
     }
-    
-    // Warn about security risk
-    console.warn('LocalLLMAdapter: Direct constructor usage bypasses DNS rebinding protection. Use LocalLLMAdapter.create() instead.');
   }
 
   /**
@@ -65,7 +69,7 @@ export class LocalLLMAdapter implements LLMAdapter {
       }
     }
 
-    return new LocalLLMAdapter(options);
+    return new LocalLLMAdapter({ ...options, [FACTORY_CREATED]: true });
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {

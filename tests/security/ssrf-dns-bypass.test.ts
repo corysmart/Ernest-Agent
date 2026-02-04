@@ -3,20 +3,20 @@ import { AnthropicAdapter } from '../../llm/adapters/anthropic-adapter';
 import { LocalLLMAdapter } from '../../llm/adapters/local-adapter';
 
 describe('SSRF DNS Validation Bypass', () => {
-  it('P3: Constructor still allows DNS-rebindable URL (backward compatibility)', () => {
-    // Constructor still exists for backward compatibility but only does basic check
-    // This documents that direct constructor usage bypasses DNS validation
+  it('P3: Constructor is now private and cannot be used directly', () => {
+    // Constructor is now private to enforce factory pattern and DNS validation
     const maliciousUrl = 'https://evil.example.com';
     
-    // Constructor only does basic check - no DNS validation
+    // Constructor cannot be called directly - must use factory method
     expect(() => {
+      // @ts-expect-error - Testing that private constructor cannot be called
       new OpenAIAdapter({
         apiKey: 'test-key',
         model: 'gpt-4',
         embeddingModel: 'text-embedding-3-small',
         baseUrl: maliciousUrl
       });
-    }).not.toThrow();
+    }).toThrow();
   });
 
   it('P3: Async factory method prevents DNS rebinding attacks', async () => {

@@ -17,11 +17,12 @@ describe('OpenAIAdapter', () => {
       json: async () => ({ choices: [{ message: { content: 'hello' } }], usage: { total_tokens: 5 } })
     });
 
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'https://api.openai.com/v1'
+      baseUrl: 'https://api.openai.com/v1',
+      resolveDns: false
     });
 
     const result = await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
@@ -30,13 +31,14 @@ describe('OpenAIAdapter', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
-  it('rejects unsafe base URL', () => {
-    expect(() => new OpenAIAdapter({
+  it('rejects unsafe base URL', async () => {
+    await expect(OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'http://127.0.0.1'
-    })).toThrow('Unsafe OpenAI base URL');
+      baseUrl: 'http://127.0.0.1',
+      resolveDns: false
+    })).rejects.toThrow('Unsafe OpenAI base URL');
   });
 
   it('fetches embeddings', async () => {
@@ -45,11 +47,12 @@ describe('OpenAIAdapter', () => {
       json: async () => ({ data: [{ embedding: [0.1, 0.2] }] })
     });
 
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'https://api.openai.com/v1'
+      baseUrl: 'https://api.openai.com/v1',
+      resolveDns: false
     });
 
     const embedding = await adapter.embed('text');

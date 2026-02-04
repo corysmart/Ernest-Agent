@@ -63,13 +63,19 @@ export class MemoryManager implements IMemoryManager {
     await this.store(memory);
   }
 
-  async query(query: MemoryQuery): Promise<MemorySearchResult[]> {
+  async query(query: MemoryQuery & { scope?: string }): Promise<MemorySearchResult[]> {
     if (!query.text) {
       throw new Error('Query text is required');
     }
 
     const embedding = await this.embeddingProvider.embed(query.text);
-    const candidates = await this.vectorStore.query(embedding, { topK: query.limit ?? 5 });
+    
+    // Use scope filter if provided to ensure tenant-local recall
+    const filter = query.scope ? { scope: query.scope } : undefined;
+    const candidates = await this.vectorStore.query(embedding, { 
+      topK: query.limit ?? 5,
+      filter
+    });
     const memories = await this.repository.getByIds(candidates.map((candidate) => candidate.id));
 
     const now = Date.now();
@@ -126,13 +132,19 @@ export class MemoryManager implements IMemoryManager {
     }
 
     const embedding = await this.embeddingProvider.embed(memory.content);
+    
+    // Extract scope from ID if it's scoped (format: "scope:id")
+    const scopeMatch = memory.id.match(/^([^:]+):(.+)$/);
+    const scope = scopeMatch ? scopeMatch[1] : undefined;
+    
     await this.vectorStore.upsert([
       {
         id: memory.id,
         vector: embedding,
         metadata: {
           type: memory.type,
-          goalId: memory.metadata?.goalId ?? ''
+          goalId: memory.metadata?.goalId ?? '',
+          ...(scope ? { scope } : {})
         }
       }
     ]);

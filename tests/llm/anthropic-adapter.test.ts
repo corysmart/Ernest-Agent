@@ -17,26 +17,28 @@ describe('AnthropicAdapter', () => {
       json: async () => ({ content: [{ text: 'hello' }], usage: { input_tokens: 2, output_tokens: 3 } })
     });
 
-    const adapter = new AnthropicAdapter({
+    const adapter = await AnthropicAdapter.create({
       apiKey: 'key',
       model: 'claude-test',
-      baseUrl: 'https://api.anthropic.com/v1'
+      baseUrl: 'https://api.anthropic.com/v1',
+      resolveDns: false
     });
 
     const result = await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
     expect(result.content).toBe('hello');
   });
 
-  it('rejects unsafe base URL', () => {
-    expect(() => new AnthropicAdapter({
+  it('rejects unsafe base URL', async () => {
+    await expect(AnthropicAdapter.create({
       apiKey: 'key',
       model: 'claude-test',
-      baseUrl: 'http://127.0.0.1'
-    })).toThrow('Unsafe Anthropic base URL');
+      baseUrl: 'http://127.0.0.1',
+      resolveDns: false
+    })).rejects.toThrow('Unsafe Anthropic base URL');
   });
 
   it('rejects embedding when not configured', async () => {
-    const adapter = new AnthropicAdapter({ apiKey: 'key', model: 'claude-test', baseUrl: 'https://api.anthropic.com/v1' });
+    const adapter = await AnthropicAdapter.create({ apiKey: 'key', model: 'claude-test', baseUrl: 'https://api.anthropic.com/v1', resolveDns: false });
     await expect(adapter.embed('text')).rejects.toThrow('Anthropic embeddings not configured');
   });
 });

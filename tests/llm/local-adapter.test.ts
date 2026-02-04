@@ -17,14 +17,14 @@ describe('LocalLLMAdapter', () => {
       json: async () => ({ content: 'ok', tokensUsed: 5 })
     });
 
-    const adapter = new LocalLLMAdapter({ baseUrl: 'https://llm.local' });
+    const adapter = await LocalLLMAdapter.create({ baseUrl: 'https://llm.local', resolveDns: false });
     const result = await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
 
     expect(result.content).toBe('ok');
   });
 
-  it('rejects unsafe base URL', () => {
-    expect(() => new LocalLLMAdapter({ baseUrl: 'http://127.0.0.1' })).toThrow('Unsafe local model URL');
+  it('rejects unsafe base URL', async () => {
+    await expect(LocalLLMAdapter.create({ baseUrl: 'http://127.0.0.1', resolveDns: false })).rejects.toThrow('Unsafe local model URL');
   });
 
   it('fetches embeddings', async () => {
@@ -33,7 +33,7 @@ describe('LocalLLMAdapter', () => {
       json: async () => ({ embedding: [0.3, 0.4] })
     });
 
-    const adapter = new LocalLLMAdapter({ baseUrl: 'https://llm.local' });
+    const adapter = await LocalLLMAdapter.create({ baseUrl: 'https://llm.local', resolveDns: false });
     const embedding = await adapter.embed('text');
 
     expect(embedding).toEqual([0.3, 0.4]);

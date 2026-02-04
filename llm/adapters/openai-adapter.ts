@@ -2,6 +2,9 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
+// Symbol to mark factory-created instances (prevents direct constructor usage)
+const FACTORY_CREATED = Symbol('factory-created');
+
 // Store DNS validation result with TTL to prevent DNS rebinding window
 interface CachedDnsValidation {
   isValid: boolean;
@@ -31,9 +34,14 @@ export class OpenAIAdapter implements LLMAdapter {
   private readonly organization?: string;
 
   /**
-   * @deprecated Use OpenAIAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   * Private constructor. Use OpenAIAdapter.create() instead to ensure DNS rebinding protection.
    */
-  constructor(options: OpenAIAdapterOptions) {
+  private constructor(options: OpenAIAdapterOptions & { [FACTORY_CREATED]?: boolean }) {
+    // Enforce factory pattern - constructor can only be called from create()
+    if (!options[FACTORY_CREATED]) {
+      throw new Error('OpenAIAdapter constructor is private. Use OpenAIAdapter.create() instead.');
+    }
+    
     if (!options.apiKey) {
       throw new Error('OpenAI API key required');
     }
@@ -48,9 +56,6 @@ export class OpenAIAdapter implements LLMAdapter {
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');
     }
-    
-    // Warn about security risk
-    console.warn('OpenAIAdapter: Direct constructor usage bypasses DNS rebinding protection. Use OpenAIAdapter.create() instead.');
   }
 
   /**
@@ -73,7 +78,7 @@ export class OpenAIAdapter implements LLMAdapter {
       }
     }
 
-    return new OpenAIAdapter(options);
+    return new OpenAIAdapter({ ...options, [FACTORY_CREATED]: true });
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {

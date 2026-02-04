@@ -3,63 +3,53 @@ import { AnthropicAdapter } from '../../llm/adapters/anthropic-adapter';
 import { LocalLLMAdapter } from '../../llm/adapters/local-adapter';
 
 describe('Constructor Bypass Protection', () => {
-  let consoleWarnSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+  it('prevents direct constructor usage - OpenAIAdapter', () => {
+    // Constructor is now private, so direct instantiation should fail
+    expect(() => {
+      // @ts-expect-error - Testing that private constructor cannot be called
+      new OpenAIAdapter({
+        apiKey: 'key',
+        model: 'gpt-test',
+        embeddingModel: 'text-embed',
+        baseUrl: 'https://api.openai.com/v1'
+      });
+    }).toThrow();
   });
 
-  afterEach(() => {
-    consoleWarnSpy.mockRestore();
+  it('prevents direct constructor usage - AnthropicAdapter', () => {
+    // Constructor is now private, so direct instantiation should fail
+    expect(() => {
+      // @ts-expect-error - Testing that private constructor cannot be called
+      new AnthropicAdapter({
+        apiKey: 'key',
+        model: 'claude-test',
+        baseUrl: 'https://api.anthropic.com/v1'
+      });
+    }).toThrow();
   });
 
-  it('warns when OpenAIAdapter constructor is used directly', () => {
-    new OpenAIAdapter({
+  it('prevents direct constructor usage - LocalLLMAdapter', () => {
+    // Constructor is now private, so direct instantiation should fail
+    expect(() => {
+      // @ts-expect-error - Testing that private constructor cannot be called
+      new LocalLLMAdapter({
+        baseUrl: 'https://localhost:11434',
+        allowlist: ['localhost']
+      });
+    }).toThrow();
+  });
+
+  it('requires factory method for instantiation', async () => {
+    // Factory method should work
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'https://api.openai.com/v1'
-    });
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('OpenAIAdapter: Direct constructor usage bypasses DNS rebinding protection')
-    );
-  });
-
-  it('warns when AnthropicAdapter constructor is used directly', () => {
-    new AnthropicAdapter({
-      apiKey: 'key',
-      model: 'claude-test',
-      baseUrl: 'https://api.anthropic.com/v1'
-    });
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('AnthropicAdapter: Direct constructor usage bypasses DNS rebinding protection')
-    );
-  });
-
-  it('warns when LocalLLMAdapter constructor is used directly', () => {
-    new LocalLLMAdapter({
-      baseUrl: 'https://localhost:11434',
-      allowlist: ['localhost']
-    });
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('LocalLLMAdapter: Direct constructor usage bypasses DNS rebinding protection')
-    );
-  });
-
-  it('allows constructor usage but warns about security risk', () => {
-    // Constructor should still work for backward compatibility
-    const adapter = new OpenAIAdapter({
-      apiKey: 'key',
-      model: 'gpt-test',
-      embeddingModel: 'text-embed',
-      baseUrl: 'https://api.openai.com/v1'
+      baseUrl: 'https://api.openai.com/v1',
+      resolveDns: false
     });
 
     expect(adapter).toBeDefined();
-    expect(consoleWarnSpy).toHaveBeenCalled();
   });
 });
 

@@ -2,6 +2,9 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
+// Symbol to mark factory-created instances (prevents direct constructor usage)
+const FACTORY_CREATED = Symbol('factory-created');
+
 // Store DNS validation result with TTL to prevent DNS rebinding window
 interface CachedDnsValidation {
   isValid: boolean;
@@ -37,9 +40,13 @@ export class AnthropicAdapter implements LLMAdapter {
   private readonly embedding?: AnthropicEmbeddingConfig;
 
   /**
-   * @deprecated Use AnthropicAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   * Private constructor. Use AnthropicAdapter.create() instead to ensure DNS rebinding protection.
    */
-  constructor(options: AnthropicAdapterOptions) {
+  private constructor(options: AnthropicAdapterOptions & { [FACTORY_CREATED]?: boolean }) {
+    // Enforce factory pattern - constructor can only be called from create()
+    if (!options[FACTORY_CREATED]) {
+      throw new Error('AnthropicAdapter constructor is private. Use AnthropicAdapter.create() instead.');
+    }
     if (!options.apiKey) {
       throw new Error('Anthropic API key required');
     }
@@ -59,9 +66,6 @@ export class AnthropicAdapter implements LLMAdapter {
     if (this.embedding && !isSafeUrlBasic(this.embedding.baseUrl)) {
       throw new Error('Unsafe embedding base URL');
     }
-    
-    // Warn about security risk
-    console.warn('AnthropicAdapter: Direct constructor usage bypasses DNS rebinding protection. Use AnthropicAdapter.create() instead.');
   }
 
   /**
@@ -97,7 +101,7 @@ export class AnthropicAdapter implements LLMAdapter {
       }
     }
 
-    return new AnthropicAdapter(options);
+    return new AnthropicAdapter({ ...options, [FACTORY_CREATED]: true });
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {

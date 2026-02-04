@@ -25,11 +25,12 @@ describe('DNS Validation During API Calls', () => {
 
     // Use a unique URL to avoid cache hits
     const uniqueUrl = `https://api.openai.com/v1-${Date.now()}`;
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: uniqueUrl
+      baseUrl: uniqueUrl,
+      resolveDns: false
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
@@ -50,11 +51,12 @@ describe('DNS Validation During API Calls', () => {
 
     // Use a unique URL to avoid cache hits
     const uniqueUrl = `https://api.openai.com/v1-embed-${Date.now()}`;
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: uniqueUrl
+      baseUrl: uniqueUrl,
+      resolveDns: false
     });
 
     await adapter.embed('test text');
@@ -69,11 +71,12 @@ describe('DNS Validation During API Calls', () => {
   it('rejects API call if DNS validation fails during generate', async () => {
     const isSafeUrlSpy = jest.spyOn(ssrfProtection, 'isSafeUrl').mockResolvedValue(false);
 
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'https://evil.example.com'
+      baseUrl: 'https://evil.example.com',
+      resolveDns: false
     });
 
     await expect(
@@ -91,10 +94,11 @@ describe('DNS Validation During API Calls', () => {
       json: async () => ({ content: [{ text: 'hello' }], usage: { input_tokens: 2, output_tokens: 3 } })
     });
 
-    const adapter = new AnthropicAdapter({
+    const adapter = await AnthropicAdapter.create({
       apiKey: 'key',
       model: 'claude-test',
-      baseUrl: 'https://api.anthropic.com/v1'
+      baseUrl: 'https://api.anthropic.com/v1',
+      resolveDns: false
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
@@ -115,10 +119,11 @@ describe('DNS Validation During API Calls', () => {
     // Use unique URLs to avoid cache hits
     const uniqueBaseUrl = `https://api.anthropic.com/v1-${Date.now()}`;
     const uniqueEmbedUrl = `https://api.anthropic.com/v1-embed-${Date.now()}`;
-    const adapter = new AnthropicAdapter({
+    const adapter = await AnthropicAdapter.create({
       apiKey: 'key',
       model: 'claude-test',
       baseUrl: uniqueBaseUrl,
+      resolveDns: false,
       embedding: {
         apiKey: 'key',
         baseUrl: uniqueEmbedUrl,
@@ -142,8 +147,9 @@ describe('DNS Validation During API Calls', () => {
       json: async () => ({ content: 'hello', tokensUsed: 5 })
     });
 
-    const adapter = new LocalLLMAdapter({
-      baseUrl: 'https://llm.local'
+    const adapter = await LocalLLMAdapter.create({
+      baseUrl: 'https://llm.local',
+      resolveDns: false
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
@@ -162,11 +168,12 @@ describe('DNS Validation During API Calls', () => {
     });
 
     const uniqueUrl = `https://api.openai.com/v1-cache-${Date.now()}`;
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: uniqueUrl
+      baseUrl: uniqueUrl,
+      resolveDns: false
     });
 
     // First call

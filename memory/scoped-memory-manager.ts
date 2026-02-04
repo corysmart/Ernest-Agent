@@ -51,33 +51,24 @@ export class ScopedMemoryManager implements IMemoryManager {
   }
 
   async query(query: MemoryQuery): Promise<MemorySearchResult[]> {
-    // To prevent retrieval dilution, we query more results than requested.
-    // Other scopes may dominate the top-K vector search results, so we need
-    // to query enough to ensure this scope gets its requested number of results.
-    const requestedLimit = query.limit ?? 5;
-    const MIN_QUERY_SIZE = 100; // Query at least 100 to account for other scopes
-    const expandedLimit = Math.max(MIN_QUERY_SIZE, requestedLimit * 10);
-    
-    const expandedQuery = {
+    // Use scope-aware vector store filtering to guarantee tenant-local recall.
+    // This prevents dilution even under heavy cross-tenant load by filtering
+    // at the vector store level before top-K selection.
+    const scopedQuery = {
       ...query,
-      limit: expandedLimit
+      scope: this.scope
     };
     
-    const results = await this.baseManager.query(expandedQuery);
+    const results = await this.baseManager.query(scopedQuery);
     
-    // Filter to only results in this scope and unscope the IDs
-    const scopedResults = results
-      .filter((result) => result.memory.id.startsWith(`${this.scope}:`))
-      .map((result) => ({
-        ...result,
-        memory: {
-          ...result.memory,
-          id: this.unscopedId(result.memory.id)
-        }
-      }));
-    
-    // Return only the requested number of results
-    return scopedResults.slice(0, requestedLimit);
+    // Unscope the IDs (they're already filtered by scope at vector store level)
+    return results.map((result) => ({
+      ...result,
+      memory: {
+        ...result.memory,
+        id: this.unscopedId(result.memory.id)
+      }
+    }));
   }
 
   async injectForPrompt(query: MemoryQuery): Promise<string> {

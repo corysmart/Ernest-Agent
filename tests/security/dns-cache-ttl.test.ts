@@ -26,11 +26,12 @@ describe('DNS Cache TTL', () => {
       json: async () => ({ choices: [{ message: { content: 'hello' } }], usage: { total_tokens: 5 } })
     });
 
-    const adapter = new OpenAIAdapter({
+    const adapter = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: 'https://api.openai.com/v1'
+      baseUrl: 'https://api.openai.com/v1',
+      resolveDns: false
     });
 
     // First call - should validate DNS
@@ -62,22 +63,24 @@ describe('DNS Cache TTL', () => {
     const url1 = `https://api.openai.com/v1-${Date.now()}`;
     const url2 = `https://api.openai.com/v2-${Date.now()}`;
 
-    const adapter1 = new OpenAIAdapter({
+    const adapter1 = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: url1
+      baseUrl: url1,
+      resolveDns: false
     });
 
     // First adapter - should validate DNS
     await adapter1.generate({ messages: [{ role: 'user', content: 'hi' }] });
     expect(isSafeUrlSpy).toHaveBeenCalledTimes(1);
 
-    const adapter2 = new OpenAIAdapter({
+    const adapter2 = await OpenAIAdapter.create({
       apiKey: 'key',
       model: 'gpt-test',
       embeddingModel: 'text-embed',
-      baseUrl: url2
+      baseUrl: url2,
+      resolveDns: false
     });
 
     // Second adapter with different URL - should validate again (different cache key)
