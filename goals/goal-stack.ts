@@ -39,7 +39,7 @@ export class GoalStack {
       return a.createdAt - b.createdAt;
     });
 
-    return candidates[0];
+    return candidates[0] ?? null;
   }
 
   listGoals(): Goal[] {

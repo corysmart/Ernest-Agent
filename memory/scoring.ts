@@ -12,7 +12,7 @@ export function cosineSimilarity(vectorA: number[], vectorB: number[], normA?: n
 
   let dot = 0;
   for (let i = 0; i < vectorA.length; i += 1) {
-    dot += vectorA[i] * vectorB[i];
+    dot += (vectorA[i] ?? 0) * (vectorB[i] ?? 0);
   }
 
   return dot / denominator;

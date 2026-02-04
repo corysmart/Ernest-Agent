@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export type Token<T> = string | symbol;
 
 type Factory<T> = (container: Container) => T;

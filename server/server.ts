@@ -4,6 +4,15 @@ import { buildContainer } from './container';
 import { CognitiveAgent } from '../core/agent/cognitive-agent';
 import { RequestEnvironment } from './request-environment';
 import { assertSafeObject } from '../security/validation';
+import type { GoalStack } from '../goals/goal-stack';
+import type { MemoryManager } from '../memory/memory-manager';
+import type { WorldModel } from '../world/world-model';
+import type { SelfModel } from '../self/self-model';
+import type { Planner } from '../goals/planner';
+import type { LLMAdapter } from '../core/contracts/llm';
+import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/security';
+import type { AgentDecision } from '../core/contracts/agent';
+import type { ToolPermissionGate } from '../core/contracts/security';
 
 const observationSchema = z.object({
   timestamp: z.number().optional(),
@@ -53,7 +62,7 @@ export async function buildServer() {
     }
 
     const { observation, goal } = parsed.data;
-    const goalStack = container.resolve<import('../goals/goal-stack').GoalStack>('goalStack');
+    const goalStack = container.resolve<GoalStack>('goalStack');
     if (goal) {
       try {
         goalStack.addGoal({
@@ -76,15 +85,15 @@ export async function buildServer() {
 
     const agent = new CognitiveAgent({
       environment,
-      memoryManager: container.resolve<import('../memory/memory-manager').MemoryManager>('memoryManager'),
-      worldModel: container.resolve<import('../world/world-model').WorldModel>('worldModel'),
-      selfModel: container.resolve<import('../self/self-model').SelfModel>('selfModel'),
+      memoryManager: container.resolve<MemoryManager>('memoryManager'),
+      worldModel: container.resolve<WorldModel>('worldModel'),
+      selfModel: container.resolve<SelfModel>('selfModel'),
       goalStack,
-      planner: container.resolve<import('../goals/planner').Planner>('planner'),
-      llmAdapter: container.resolve<import('../core/contracts/llm').LLMAdapter>('llmAdapter'),
-      promptFilter: container.resolve<import('../core/contracts/security').PromptInjectionFilter>('promptFilter'),
-      outputValidator: container.resolve<import('../core/contracts/security').OutputValidator<import('../core/contracts/agent').AgentDecision>>('outputValidator'),
-      permissionGate: container.resolve<import('../core/contracts/security').ToolPermissionGate>('permissionGate')
+      planner: container.resolve<Planner>('planner'),
+      llmAdapter: container.resolve<LLMAdapter>('llmAdapter'),
+      promptFilter: container.resolve<PromptInjectionFilter>('promptFilter'),
+      outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),
+      permissionGate: container.resolve<ToolPermissionGate>('permissionGate')
     });
 
     const result = await agent.runOnce();

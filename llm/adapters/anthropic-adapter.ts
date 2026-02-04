@@ -73,7 +73,10 @@ export class AnthropicAdapter implements LLMAdapter {
       throw new Error(`Anthropic API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      content?: Array<{ text?: string }> | string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
     const contentParts = Array.isArray(data?.content)
       ? (data.content as Array<{ text?: string }>)
       : [];
@@ -111,7 +114,10 @@ export class AnthropicAdapter implements LLMAdapter {
       throw new Error(`Embedding API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      data?: Array<{ embedding?: number[] }>;
+      embedding?: number[];
+    };
     const embedding = data?.data?.[0]?.embedding ?? data?.embedding;
     if (!Array.isArray(embedding)) {
       throw new Error('Embedding response missing');

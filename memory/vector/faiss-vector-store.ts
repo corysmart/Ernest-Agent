@@ -35,6 +35,9 @@ export class FaissVectorStore implements VectorStore {
     for (let i = 0; i < result.ids.length; i += 1) {
       const id = result.ids[i];
       const distance = result.distances[i];
+      if (id === undefined || distance === undefined) {
+        continue;
+      }
       const metadata = this.metadata.get(id);
       if (options.filter && !matchesFilter(metadata, options.filter)) {
         continue;

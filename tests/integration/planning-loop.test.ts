@@ -44,6 +44,6 @@ describe('Integration: planning loop', () => {
       candidateActions: goal.candidateActions ?? []
     });
 
-    expect(plan.steps[0].action.type).toBe('scale-up');
+    expect(plan.steps[0]!.action.type).toBe('scale-up');
   });
 });

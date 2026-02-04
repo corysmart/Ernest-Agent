@@ -26,13 +26,13 @@ function buildAgent(overrides: Partial<{
     act: async () => ({ success: true })
   };
 
-  const memoryManager: MemoryManager = overrides.memoryManager ?? {
+  const memoryManager: MemoryManager = overrides.memoryManager ?? ({
     addEpisodic: async () => {},
     addSemantic: async () => {},
     addProcedural: async () => {},
     query: async () => [],
     injectForPrompt: async () => 'memory'
-  } as MemoryManager;
+  } as unknown as MemoryManager);
 
   const worldModel: WorldModel = overrides.worldModel ?? {
     update: () => ({ timestamp: 1, facts: { status: 'ok' }, uncertainty: 0.2 }),
@@ -40,7 +40,7 @@ function buildAgent(overrides: Partial<{
     updateFromResult: (state) => state
   };
 
-  const goalStack: GoalStack = overrides.goalStack ?? {
+  const goalStack: GoalStack = overrides.goalStack ?? ({
     addGoal: () => {},
     updateStatus: () => {},
     resolveNextGoal: () => ({
@@ -53,7 +53,7 @@ function buildAgent(overrides: Partial<{
       updatedAt: 1
     }),
     listGoals: () => []
-  } as GoalStack;
+  } as unknown as GoalStack);
 
   const planner: Planner = overrides.planner ?? {
     plan: () => ({

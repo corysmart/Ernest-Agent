@@ -22,8 +22,8 @@ describe('PostgresMemoryRepository', () => {
     const results = await repo.getByIds(['s1']);
 
     expect(results).toHaveLength(1);
-    expect(results[0].type).toBe('semantic');
-    expect((results[0] as SemanticMemory).factConfidence).toBeCloseTo(0.9);
+    expect(results[0]!.type).toBe('semantic');
+    expect((results[0]! as SemanticMemory).factConfidence).toBeCloseTo(0.9);
   });
 
   it('handles content with quotes safely', async () => {
@@ -44,7 +44,7 @@ describe('PostgresMemoryRepository', () => {
     await repo.save(memory);
     const results = await repo.getByIds(['s2']);
 
-    expect(results[0].content).toContain("O'Reilly");
+    expect(results[0]!.content).toContain("O'Reilly");
   });
 
   it('returns empty results when ids are missing', async () => {

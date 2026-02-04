@@ -47,15 +47,16 @@ export class RuleBasedWorldModel implements WorldModel {
     const predictor = this.predictors.find((item) => item.canHandle(action));
     const prediction = predictor ? predictor.predict(state, action) : {};
 
+    const rawUncertainty = prediction.uncertainty ?? Math.min(1, state.uncertainty + 0.2);
+    if (rawUncertainty < 0 || rawUncertainty > 1) {
+      throw new Error('Uncertainty must be between 0 and 1');
+    }
+
     const expectedState: WorldState = {
       timestamp: Date.now(),
       facts: { ...state.facts, ...sanitizeFacts(prediction.facts ?? {}) },
-      uncertainty: clamp(prediction.uncertainty ?? Math.min(1, state.uncertainty + 0.2))
+      uncertainty: clamp(rawUncertainty)
     };
-
-    if (expectedState.uncertainty < 0 || expectedState.uncertainty > 1) {
-      throw new Error('Uncertainty must be between 0 and 1');
-    }
 
     const score = prediction.score ?? scoreOutcome(expectedState);
 

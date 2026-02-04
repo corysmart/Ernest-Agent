@@ -35,7 +35,7 @@ describe('HeuristicPlanner', () => {
       candidateActions: actions
     });
 
-    expect(plan.steps[0].action.type).toBe('good');
+    expect(plan.steps[0]!.action.type).toBe('good');
   });
 
   it('rejects missing candidate actions', () => {

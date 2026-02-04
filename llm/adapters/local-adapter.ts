@@ -50,7 +50,11 @@ export class LocalLLMAdapter implements LLMAdapter {
       throw new Error(`Local model error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      content?: string;
+      text?: string;
+      tokensUsed?: number;
+    };
     const content = data?.content ?? data?.text;
     if (!content) {
       throw new Error('Local model response missing content');
@@ -75,7 +79,9 @@ export class LocalLLMAdapter implements LLMAdapter {
       throw new Error(`Local embedding error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      embedding?: number[];
+    };
     const embedding = data?.embedding;
     if (!Array.isArray(embedding)) {
       throw new Error('Local embedding missing');

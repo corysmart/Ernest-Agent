@@ -18,6 +18,6 @@ describe('InMemorySecretsVault', () => {
     const vault = new EnvSecretsVault();
 
     expect(vault.getSecret('TEST_SECRET')).toBe('value');
-    expect(() => vault.setSecret('TEST_SECRET', 'new')).toThrow('read-only');
+    expect(() => vault.setSecret()).toThrow('read-only');
   });
 });

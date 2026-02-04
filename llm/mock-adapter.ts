@@ -73,7 +73,7 @@ function simpleEmbedding(text: string, size: number): number[] {
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
     const slot = index % size;
-    vector[slot] += code;
+    vector[slot] = (vector[slot] ?? 0) + code;
   }
 
   const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));

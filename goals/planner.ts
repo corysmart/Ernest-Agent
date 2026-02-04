@@ -37,6 +37,9 @@ export class HeuristicPlanner implements Planner {
     }
 
     const selected = bestAction ?? context.candidateActions[0];
+    if (!selected) {
+      throw new Error('No candidate actions available');
+    }
     const steps: PlanStep[] = [
       {
         id: randomUUID(),

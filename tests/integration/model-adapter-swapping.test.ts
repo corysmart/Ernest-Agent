@@ -20,7 +20,7 @@ function buildAgent(adapter: MockLLMAdapter) {
     addProcedural: async () => {},
     query: async () => [],
     injectForPrompt: async () => ''
-  } as MemoryManager;
+  } as unknown as MemoryManager;
 
   const worldModel: WorldModel = {
     update: (obs) => ({ timestamp: obs.timestamp, facts: obs.state, uncertainty: 0.2 }),
@@ -41,7 +41,7 @@ function buildAgent(adapter: MockLLMAdapter) {
       updatedAt: 1
     }),
     listGoals: () => []
-  } as GoalStack;
+  } as unknown as GoalStack;
 
   const planner: Planner = {
     plan: () => ({

@@ -4,7 +4,10 @@ describe('SandboxedToolRunner', () => {
   it('runs registered tools', async () => {
     const runner = new SandboxedToolRunner({
       tools: {
-        echo: async (input: { text: string }) => ({ echoed: input.text })
+        echo: async (input: Record<string, unknown>) => {
+          const text = input.text as string;
+          return { echoed: text };
+        }
       }
     });
 

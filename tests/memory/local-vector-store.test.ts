@@ -10,7 +10,7 @@ describe('LocalVectorStore', () => {
 
     const results = await store.query([0.9, 0.1], { topK: 1 });
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe('a');
+    expect(results[0]!.id).toBe('a');
   });
 
   it('rejects inconsistent vector dimensions', async () => {

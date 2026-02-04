@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { AgentRegistry } from './agent-registry';
 import type { MessageBus } from './message-bus';
 import type { AgentMessage, MessageType } from './message';
-import { assertSafeObject } from '../security/validation';
+import { assertSafePayload } from '../env/validation';
 
 interface SendOptions {
   from: string;
@@ -21,7 +21,7 @@ export class MultiAgentCoordinator {
       throw new Error('Agent not registered');
     }
 
-    assertSafeObject(options.payload);
+    assertSafePayload(options.payload);
 
     if (options.type === 'memory') {
       const scope = String(options.payload.memoryScope ?? '');

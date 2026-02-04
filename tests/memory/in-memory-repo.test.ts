@@ -16,7 +16,7 @@ describe('InMemoryMemoryRepository', () => {
     const results = await repo.getByIds(['m1']);
 
     expect(results).toHaveLength(1);
-    expect(results[0].content).toBe('Agent observed event');
+    expect(results[0]!.content).toBe('Agent observed event');
   });
 
   it('updates access timestamp', async () => {
@@ -34,7 +34,7 @@ describe('InMemoryMemoryRepository', () => {
     await repo.updateAccess('m2', now + 1000);
 
     const [stored] = await repo.getByIds(['m2']);
-    expect(stored.lastAccessedAt).toBe(now + 1000);
+    expect(stored?.lastAccessedAt).toBe(now + 1000);
   });
 
   it('returns empty array for unknown ids', async () => {

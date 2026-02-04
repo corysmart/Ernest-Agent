@@ -66,7 +66,7 @@ export class CognitiveAgent {
         ? goal.candidateActions.map((action) => ({ type: action.type, payload: action.payload }))
         : [{ type: 'pursue_goal', payload: { goalId: goal.id } }];
 
-      const plan = this.options.planner.plan(goal, {
+      this.options.planner.plan(goal, {
         worldState,
         self: selfSnapshot,
         candidateActions

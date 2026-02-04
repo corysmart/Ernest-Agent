@@ -31,6 +31,6 @@ describe('Integration: memory retrieval loop', () => {
     });
 
     const results = await manager.query({ text: 'stabilized', limit: 1 });
-    expect(results[0].memory.id).toBe('m1');
+    expect(results[0]!.memory.id).toBe('m1');
   });
 });

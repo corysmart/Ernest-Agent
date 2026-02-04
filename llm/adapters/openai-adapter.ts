@@ -60,7 +60,10 @@ export class OpenAIAdapter implements LLMAdapter {
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      choices?: Array<{ message?: { content?: string }; text?: string }>;
+      usage?: { total_tokens?: number };
+    };
     const content = data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text;
     if (!content) {
       throw new Error('OpenAI response missing content');
@@ -91,7 +94,9 @@ export class OpenAIAdapter implements LLMAdapter {
       throw new Error(`OpenAI embedding error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      data?: Array<{ embedding?: number[] }>;
+    };
     const embedding = data?.data?.[0]?.embedding;
     if (!Array.isArray(embedding)) {
       throw new Error('OpenAI embedding missing');

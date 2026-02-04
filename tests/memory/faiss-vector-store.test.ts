@@ -13,8 +13,8 @@ describe('FaissVectorStore', () => {
     const results = await store.query([1, 0], { topK: 1 });
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe('a');
-    expect(results[0].metadata?.label).toBe('first');
+    expect(results[0]!.id).toBe('a');
+    expect(results[0]!.metadata?.label).toBe('first');
   });
 });
 
@@ -35,7 +35,7 @@ class FakeIndex implements FaissIndex {
       .slice(0, topK);
 
     return {
-      ids: sorted.map((entry) => entry.id),
+      ids: sorted.map((entry) => entry.id!).filter((id): id is string => id !== undefined),
       distances: sorted.map((entry) => entry.distance)
     };
   }
@@ -53,7 +53,7 @@ class FakeIndex implements FaissIndex {
 
 function euclidean(a: number[], b: number[]): number {
   return Math.sqrt(a.reduce((sum, value, index) => {
-    const diff = value - b[index];
+    const diff = value - (b[index] ?? 0);
     return sum + diff * diff;
   }, 0));
 }

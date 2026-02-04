@@ -25,8 +25,8 @@ describe('MemoryManager', () => {
     const results = await manager.query({ text: 'anomaly', limit: 1 });
 
     expect(results).toHaveLength(1);
-    expect(results[0].memory.id).toBe('e1');
-    expect(results[0].score).toBeGreaterThan(0);
+    expect(results[0]!.memory.id).toBe('e1');
+    expect(results[0]!.score).toBeGreaterThan(0);
   });
 
   it('injects memory into prompt context', async () => {
