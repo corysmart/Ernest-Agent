@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrl } from '../../security/ssrf-protection';
+import { isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface LocalAdapterOptions {
   baseUrl: string;
@@ -25,7 +25,7 @@ export class LocalLLMAdapter implements LLMAdapter {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
 
-    if (!isSafeUrl(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
+    if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
     }
   }

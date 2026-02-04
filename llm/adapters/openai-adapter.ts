@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrl } from '../../security/ssrf-protection';
+import { isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface OpenAIAdapterOptions {
   apiKey: string;
@@ -33,7 +33,7 @@ export class OpenAIAdapter implements LLMAdapter {
     this.costPerToken = options.costPerToken ?? 0;
     this.organization = options.organization;
 
-    if (!isSafeUrl(this.baseUrl)) {
+    if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');
     }
   }

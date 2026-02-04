@@ -75,4 +75,38 @@ describe('MemoryManager', () => {
 
     await expect(manager.query({ text: '', limit: 1 })).rejects.toThrow('Query text is required');
   });
+
+  it('rolls back vector upsert when repository save fails', async () => {
+    const failingRepo = {
+      save: async () => {
+        throw new Error('db down');
+      },
+      getByIds: async () => [],
+      updateAccess: async () => {},
+      listByType: async () => [],
+      delete: async () => {}
+    };
+
+    const vectorStore = {
+      upsert: jest.fn(async () => {}),
+      query: jest.fn(async () => []),
+      delete: jest.fn(async () => {})
+    };
+
+    const manager = new MemoryManager({
+      repository: failingRepo as any,
+      vectorStore: vectorStore as any,
+      embeddingProvider: embedder
+    });
+
+    await expect(manager.addEpisodic({
+      id: 'e4',
+      type: 'episodic',
+      content: 'Rollback test',
+      createdAt: Date.now(),
+      eventType: 'test'
+    })).rejects.toThrow('db down');
+
+    expect(vectorStore.delete).toHaveBeenCalledWith('e4');
+  });
 });
