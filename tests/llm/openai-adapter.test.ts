@@ -1,10 +1,13 @@
 import { OpenAIAdapter } from '../../llm/adapters/openai-adapter';
+import * as ssrfProtection from '../../security/ssrf-protection';
 
 const fetchMock = jest.fn();
 
 beforeEach(() => {
   fetchMock.mockReset();
   (global as any).fetch = fetchMock;
+  // Mock DNS validation to always pass in tests
+  jest.spyOn(ssrfProtection, 'isSafeUrl').mockResolvedValue(true);
 });
 
 describe('OpenAIAdapter', () => {
