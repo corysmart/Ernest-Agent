@@ -25,13 +25,17 @@ export interface ContainerContext {
   toolRunner: SandboxedToolRunner;
 }
 
-export async function buildContainer(): Promise<ContainerContext> {
+export interface BuildContainerOptions {
+  resolveDns?: boolean;
+}
+
+export async function buildContainer(options: BuildContainerOptions = {}): Promise<ContainerContext> {
   const container = new Container();
 
   const vectorStore = new LocalVectorStore();
   const memoryRepository = await buildMemoryRepository();
-  const llmAdapter = await buildLlmAdapter();
-  const embeddingProvider = await buildEmbeddingProvider(llmAdapter);
+  const llmAdapter = await buildLlmAdapter(options);
+  const embeddingProvider = await buildEmbeddingProvider(llmAdapter, options);
   const memoryManager = new MemoryManager({
     repository: memoryRepository,
     vectorStore,
@@ -74,20 +78,23 @@ async function buildMemoryRepository() {
   return new InMemoryMemoryRepository();
 }
 
-async function buildLlmAdapter(): Promise<LLMAdapter> {
+async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLMAdapter> {
   const provider = (process.env.LLM_PROVIDER ?? 'mock').toLowerCase();
+  const resolveDns = options.resolveDns ?? (process.env.SSRF_RESOLVE_DNS === 'false' ? false : true);
 
   if (provider === 'openai') {
     const apiKey = requireEnv('OPENAI_API_KEY');
     const model = requireEnv('OPENAI_MODEL');
     const embeddingModel = requireEnv('OPENAI_EMBEDDING_MODEL');
     const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
-    await assertSafeUrl(baseUrl);
-    return new OpenAIAdapter({
+    
+    // Use async factory method that validates DNS
+    return await OpenAIAdapter.create({
       apiKey,
       model,
       embeddingModel,
-      baseUrl
+      baseUrl,
+      resolveDns
     });
   }
 
@@ -95,15 +102,16 @@ async function buildLlmAdapter(): Promise<LLMAdapter> {
     const apiKey = requireEnv('ANTHROPIC_API_KEY');
     const model = requireEnv('ANTHROPIC_MODEL');
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com/v1';
-    await assertSafeUrl(baseUrl);
     const embeddingModel = process.env.ANTHROPIC_EMBEDDING_MODEL;
     const embeddingApiKey = process.env.ANTHROPIC_EMBEDDING_API_KEY;
     const embeddingBaseUrl = process.env.ANTHROPIC_EMBEDDING_BASE_URL ?? baseUrl;
 
-    return new AnthropicAdapter({
+    // Use async factory method that validates DNS
+    return await AnthropicAdapter.create({
       apiKey,
       model,
       baseUrl,
+      resolveDns,
       embedding: embeddingModel && embeddingApiKey
         ? {
           apiKey: embeddingApiKey,
@@ -119,8 +127,9 @@ async function buildLlmAdapter(): Promise<LLMAdapter> {
     const allowlist = process.env.LOCAL_LLM_ALLOWLIST
       ? process.env.LOCAL_LLM_ALLOWLIST.split(',').map((entry) => entry.trim()).filter(Boolean)
       : undefined;
-    await assertSafeUrl(baseUrl, allowlist);
-    return new LocalLLMAdapter({ baseUrl, allowlist });
+    
+    // Use async factory method that validates DNS
+    return await LocalLLMAdapter.create({ baseUrl, allowlist, resolveDns });
   }
 
   return new MockLLMAdapter({
@@ -128,8 +137,9 @@ async function buildLlmAdapter(): Promise<LLMAdapter> {
   });
 }
 
-async function buildEmbeddingProvider(llmAdapter: LLMAdapter): Promise<EmbeddingProvider> {
+async function buildEmbeddingProvider(llmAdapter: LLMAdapter, options: BuildContainerOptions = {}): Promise<EmbeddingProvider> {
   const provider = (process.env.EMBEDDING_PROVIDER ?? 'llm').toLowerCase();
+  const resolveDns = options.resolveDns ?? (process.env.SSRF_RESOLVE_DNS === 'false' ? false : true);
 
   if (provider === 'llm') {
     if ((process.env.LLM_PROVIDER ?? 'mock').toLowerCase() === 'anthropic') {
@@ -146,8 +156,7 @@ async function buildEmbeddingProvider(llmAdapter: LLMAdapter): Promise<Embedding
     const model = requireEnv('OPENAI_MODEL');
     const embeddingModel = requireEnv('OPENAI_EMBEDDING_MODEL');
     const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
-    await assertSafeUrl(baseUrl);
-    return new OpenAIAdapter({ apiKey, model, embeddingModel, baseUrl });
+    return await OpenAIAdapter.create({ apiKey, model, embeddingModel, baseUrl, resolveDns });
   }
 
   if (provider === 'anthropic') {
@@ -157,12 +166,11 @@ async function buildEmbeddingProvider(llmAdapter: LLMAdapter): Promise<Embedding
     const embeddingApiKey = process.env.ANTHROPIC_EMBEDDING_API_KEY ?? apiKey;
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com/v1';
     const embeddingBaseUrl = process.env.ANTHROPIC_EMBEDDING_BASE_URL ?? baseUrl;
-    await assertSafeUrl(baseUrl);
-    await assertSafeUrl(embeddingBaseUrl);
-    return new AnthropicAdapter({
+    return await AnthropicAdapter.create({
       apiKey,
       model,
       baseUrl,
+      resolveDns,
       embedding: {
         apiKey: embeddingApiKey,
         baseUrl: embeddingBaseUrl,
@@ -176,8 +184,7 @@ async function buildEmbeddingProvider(llmAdapter: LLMAdapter): Promise<Embedding
     const allowlist = process.env.LOCAL_LLM_ALLOWLIST
       ? process.env.LOCAL_LLM_ALLOWLIST.split(',').map((entry) => entry.trim()).filter(Boolean)
       : undefined;
-    await assertSafeUrl(baseUrl, allowlist);
-    return new LocalLLMAdapter({ baseUrl, allowlist });
+    return await LocalLLMAdapter.create({ baseUrl, allowlist, resolveDns });
   }
 
   if (provider === 'mock') {
@@ -195,9 +202,4 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function assertSafeUrl(url: string, allowlist?: string[]): Promise<void> {
-  const allowed = await isSafeUrl(url, allowlist ? { allowlist } : undefined);
-  if (!allowed) {
-    throw new Error(`Unsafe URL: ${url}`);
-  }
-}
+// Removed assertSafeUrl - DNS validation now handled by adapter factory methods

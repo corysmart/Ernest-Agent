@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrlBasic } from '../../security/ssrf-protection';
+import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface AnthropicEmbeddingConfig {
   apiKey: string;
@@ -47,6 +47,42 @@ export class AnthropicAdapter implements LLMAdapter {
     if (this.embedding && !isSafeUrlBasic(this.embedding.baseUrl)) {
       throw new Error('Unsafe embedding base URL');
     }
+  }
+
+  /**
+   * Async factory method that validates DNS before constructing adapter.
+   * Use this instead of constructor to prevent SSRF DNS rebinding attacks.
+   */
+  static async create(options: AnthropicAdapterOptions & { resolveDns?: boolean }): Promise<AnthropicAdapter> {
+    const baseUrl = options.baseUrl ?? 'https://api.anthropic.com/v1';
+    
+    // Always do basic validation
+    if (!isSafeUrlBasic(baseUrl)) {
+      throw new Error('Unsafe Anthropic base URL');
+    }
+
+    // If DNS resolution is enabled (default), validate DNS to prevent rebinding
+    if (options.resolveDns !== false) {
+      const isSafe = await isSafeUrl(baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe Anthropic base URL: ${baseUrl} resolves to private IP`);
+      }
+    }
+
+    // Validate embedding URL if provided
+    if (options.embedding) {
+      if (!isSafeUrlBasic(options.embedding.baseUrl)) {
+        throw new Error('Unsafe embedding base URL');
+      }
+      if (options.resolveDns !== false) {
+        const isSafe = await isSafeUrl(options.embedding.baseUrl);
+        if (!isSafe) {
+          throw new Error(`Unsafe embedding base URL: ${options.embedding.baseUrl} resolves to private IP`);
+        }
+      }
+    }
+
+    return new AnthropicAdapter(options);
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {

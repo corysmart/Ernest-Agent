@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrlBasic } from '../../security/ssrf-protection';
+import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface LocalAdapterOptions {
   baseUrl: string;
@@ -28,6 +28,27 @@ export class LocalLLMAdapter implements LLMAdapter {
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
     }
+  }
+
+  /**
+   * Async factory method that validates DNS before constructing adapter.
+   * Use this instead of constructor to prevent SSRF DNS rebinding attacks.
+   */
+  static async create(options: LocalAdapterOptions & { resolveDns?: boolean }): Promise<LocalLLMAdapter> {
+    // Always do basic validation
+    if (!isSafeUrlBasic(options.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
+      throw new Error('Unsafe local model URL');
+    }
+
+    // If DNS resolution is enabled (default) and no allowlist, validate DNS to prevent rebinding
+    if (options.resolveDns !== false && (!options.allowlist || options.allowlist.length === 0)) {
+      const isSafe = await isSafeUrl(options.baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe local model URL: ${options.baseUrl} resolves to private IP`);
+      }
+    }
+
+    return new LocalLLMAdapter(options);
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {
