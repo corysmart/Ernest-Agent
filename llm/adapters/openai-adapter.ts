@@ -2,8 +2,14 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
-// Store DNS validation result to avoid re-validating on every request
-let cachedDnsValidation: { url: string; isValid: boolean } | null = null;
+// Store DNS validation result with TTL to prevent DNS rebinding window
+interface CachedDnsValidation {
+  isValid: boolean;
+  timestamp: number;
+}
+
+const DNS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const dnsValidationCache = new Map<string, CachedDnsValidation>();
 
 interface OpenAIAdapterOptions {
   apiKey: string;
@@ -24,6 +30,9 @@ export class OpenAIAdapter implements LLMAdapter {
   private readonly costPerToken: number;
   private readonly organization?: string;
 
+  /**
+   * @deprecated Use OpenAIAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   */
   constructor(options: OpenAIAdapterOptions) {
     if (!options.apiKey) {
       throw new Error('OpenAI API key required');
@@ -39,6 +48,9 @@ export class OpenAIAdapter implements LLMAdapter {
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');
     }
+    
+    // Warn about security risk
+    console.warn('OpenAIAdapter: Direct constructor usage bypasses DNS rebinding protection. Use OpenAIAdapter.create() instead.');
   }
 
   /**
@@ -71,12 +83,16 @@ export class OpenAIAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}/chat/completions`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
+    const now = Date.now();
+    const cached = dnsValidationCache.get(this.baseUrl);
+    
+    // Revalidate if cache expired or URL not cached
+    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
       const isSafe = await isSafeUrl(this.baseUrl);
       if (!isSafe) {
         throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const payload = {
@@ -117,12 +133,16 @@ export class OpenAIAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}/embeddings`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
+    const now = Date.now();
+    const cached = dnsValidationCache.get(this.baseUrl);
+    
+    // Revalidate if cache expired or URL not cached
+    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
       const isSafe = await isSafeUrl(this.baseUrl);
       if (!isSafe) {
         throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const payload = {

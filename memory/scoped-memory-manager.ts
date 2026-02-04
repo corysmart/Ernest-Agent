@@ -51,10 +51,22 @@ export class ScopedMemoryManager implements IMemoryManager {
   }
 
   async query(query: MemoryQuery): Promise<MemorySearchResult[]> {
-    const results = await this.baseManager.query(query);
+    // To prevent retrieval dilution, we query more results than requested.
+    // Other scopes may dominate the top-K vector search results, so we need
+    // to query enough to ensure this scope gets its requested number of results.
+    const requestedLimit = query.limit ?? 5;
+    const MIN_QUERY_SIZE = 100; // Query at least 100 to account for other scopes
+    const expandedLimit = Math.max(MIN_QUERY_SIZE, requestedLimit * 10);
+    
+    const expandedQuery = {
+      ...query,
+      limit: expandedLimit
+    };
+    
+    const results = await this.baseManager.query(expandedQuery);
     
     // Filter to only results in this scope and unscope the IDs
-    return results
+    const scopedResults = results
       .filter((result) => result.memory.id.startsWith(`${this.scope}:`))
       .map((result) => ({
         ...result,
@@ -63,6 +75,9 @@ export class ScopedMemoryManager implements IMemoryManager {
           id: this.unscopedId(result.memory.id)
         }
       }));
+    
+    // Return only the requested number of results
+    return scopedResults.slice(0, requestedLimit);
   }
 
   async injectForPrompt(query: MemoryQuery): Promise<string> {

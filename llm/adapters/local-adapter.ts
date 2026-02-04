@@ -2,8 +2,14 @@ import type { LLMAdapter, LLMResponse, PromptRequest } from '../../core/contract
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
-// Store DNS validation result to avoid re-validating on every request
-let cachedDnsValidation: { url: string; isValid: boolean } | null = null;
+// Store DNS validation result with TTL to prevent DNS rebinding window
+interface CachedDnsValidation {
+  isValid: boolean;
+  timestamp: number;
+}
+
+const DNS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const dnsValidationCache = new Map<string, CachedDnsValidation>();
 
 interface LocalAdapterOptions {
   baseUrl: string;
@@ -20,17 +26,25 @@ export class LocalLLMAdapter implements LLMAdapter {
   private readonly embedPath: string;
   private readonly timeoutMs: number;
   private readonly costPerToken: number;
+  private readonly allowlist?: string[];
 
+  /**
+   * @deprecated Use LocalLLMAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   */
   constructor(options: LocalAdapterOptions) {
     this.baseUrl = options.baseUrl;
     this.generatePath = options.generatePath ?? '/generate';
     this.embedPath = options.embedPath ?? '/embed';
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
+    this.allowlist = options.allowlist;
 
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
     }
+    
+    // Warn about security risk
+    console.warn('LocalLLMAdapter: Direct constructor usage bypasses DNS rebinding protection. Use LocalLLMAdapter.create() instead.');
   }
 
   /**
@@ -61,12 +75,21 @@ export class LocalLLMAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}${this.generatePath}`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    
+    // If allowlist is configured, skip DNS validation (allowlist bypasses DNS check)
+    if (!this.allowlist || this.allowlist.length === 0) {
+      const cacheKey = `${this.baseUrl}:no-allowlist`;
+      const now = Date.now();
+      const cached = dnsValidationCache.get(cacheKey);
+      
+      // Revalidate if cache expired or URL not cached
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.baseUrl);
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(cacheKey, { isValid: true, timestamp: now });
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
     }
 
     const response = await fetchWithTimeout(requestUrl, {
@@ -105,12 +128,21 @@ export class LocalLLMAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}${this.embedPath}`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    
+    // If allowlist is configured, skip DNS validation (allowlist bypasses DNS check)
+    if (!this.allowlist || this.allowlist.length === 0) {
+      const cacheKey = `${this.baseUrl}:no-allowlist`;
+      const now = Date.now();
+      const cached = dnsValidationCache.get(cacheKey);
+      
+      // Revalidate if cache expired or URL not cached
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.baseUrl);
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(cacheKey, { isValid: true, timestamp: now });
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
     }
 
     const response = await fetchWithTimeout(requestUrl, {

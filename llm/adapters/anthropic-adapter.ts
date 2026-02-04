@@ -2,8 +2,14 @@ import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../.
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
 import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
-// Store DNS validation result to avoid re-validating on every request
-let cachedDnsValidation: { url: string; isValid: boolean } | null = null;
+// Store DNS validation result with TTL to prevent DNS rebinding window
+interface CachedDnsValidation {
+  isValid: boolean;
+  timestamp: number;
+}
+
+const DNS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const dnsValidationCache = new Map<string, CachedDnsValidation>();
 
 interface AnthropicEmbeddingConfig {
   apiKey: string;
@@ -30,6 +36,9 @@ export class AnthropicAdapter implements LLMAdapter {
   private readonly anthropicVersion: string;
   private readonly embedding?: AnthropicEmbeddingConfig;
 
+  /**
+   * @deprecated Use AnthropicAdapter.create() instead. Direct constructor usage bypasses DNS rebinding protection.
+   */
   constructor(options: AnthropicAdapterOptions) {
     if (!options.apiKey) {
       throw new Error('Anthropic API key required');
@@ -50,6 +59,9 @@ export class AnthropicAdapter implements LLMAdapter {
     if (this.embedding && !isSafeUrlBasic(this.embedding.baseUrl)) {
       throw new Error('Unsafe embedding base URL');
     }
+    
+    // Warn about security risk
+    console.warn('AnthropicAdapter: Direct constructor usage bypasses DNS rebinding protection. Use AnthropicAdapter.create() instead.');
   }
 
   /**
@@ -104,12 +116,16 @@ export class AnthropicAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.baseUrl)}/messages`;
-    if (cachedDnsValidation?.url !== this.baseUrl) {
+    const now = Date.now();
+    const cached = dnsValidationCache.get(this.baseUrl);
+    
+    // Revalidate if cache expired or URL not cached
+    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
       const isSafe = await isSafeUrl(this.baseUrl);
       if (!isSafe) {
         throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
       }
-      cachedDnsValidation = { url: this.baseUrl, isValid: true };
+      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const response = await fetchWithTimeout(requestUrl, {
@@ -152,12 +168,16 @@ export class AnthropicAdapter implements LLMAdapter {
 
     // Validate URL before making request to prevent DNS rebinding attacks
     const requestUrl = `${trimSlash(this.embedding.baseUrl)}/embeddings`;
-    if (cachedDnsValidation?.url !== this.embedding.baseUrl) {
+    const now = Date.now();
+    const cached = dnsValidationCache.get(this.embedding.baseUrl);
+    
+    // Revalidate if cache expired or URL not cached
+    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
       const isSafe = await isSafeUrl(this.embedding.baseUrl);
       if (!isSafe) {
         throw new Error(`Unsafe URL detected: ${this.embedding.baseUrl} resolves to private IP`);
       }
-      cachedDnsValidation = { url: this.embedding.baseUrl, isValid: true };
+      dnsValidationCache.set(this.embedding.baseUrl, { isValid: true, timestamp: now });
     }
 
     const response = await fetchWithTimeout(requestUrl, {
