@@ -1,10 +1,13 @@
 import { isIP } from 'net';
+import { lookup } from 'dns/promises';
 
 interface SSRFOptions {
   allowlist?: string[];
+  resolveDns?: boolean;
+  lookupFn?: (hostname: string) => Promise<Array<{ address: string }>>;
 }
 
-export function isSafeUrl(url: string, options: SSRFOptions = {}): boolean {
+export function isSafeUrlBasic(url: string, options: SSRFOptions = {}): boolean {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -32,7 +35,46 @@ export function isSafeUrl(url: string, options: SSRFOptions = {}): boolean {
   return true;
 }
 
+export async function isSafeUrl(url: string, options: SSRFOptions = {}): Promise<boolean> {
+  if (!isSafeUrlBasic(url, options)) {
+    return false;
+  }
+
+  const parsed = new URL(url);
+  if (options.allowlist && options.allowlist.length > 0) {
+    return true;
+  }
+
+  if (isIP(parsed.hostname)) {
+    return true;
+  }
+
+  if (options.resolveDns === false) {
+    return true;
+  }
+
+  const lookupFn = options.lookupFn ?? defaultLookup;
+  const addresses = await lookupFn(parsed.hostname);
+  if (!addresses.length) {
+    return false;
+  }
+
+  return addresses.every((entry) => !isPrivateIp(entry.address));
+}
+
 function isPrivateIp(ip: string): boolean {
+  if (ip === '::1') {
+    return true;
+  }
+
+  if (ip.startsWith('fc') || ip.startsWith('fd')) {
+    return true;
+  }
+
+  if (ip.startsWith('fe80:')) {
+    return true;
+  }
+
   if (ip.startsWith('127.') || ip === '0.0.0.0') {
     return true;
   }
@@ -58,4 +100,9 @@ function isPrivateIp(ip: string): boolean {
   }
 
   return false;
+}
+
+async function defaultLookup(hostname: string): Promise<Array<{ address: string }>> {
+  const results = await lookup(hostname, { all: true });
+  return results.map((entry) => ({ address: entry.address }));
 }

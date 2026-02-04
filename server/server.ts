@@ -4,11 +4,11 @@ import { buildContainer } from './container';
 import { CognitiveAgent } from '../core/agent/cognitive-agent';
 import { RequestEnvironment } from './request-environment';
 import { assertSafeObject } from '../security/validation';
-import type { GoalStack } from '../goals/goal-stack';
+import { RuleBasedWorldModel } from '../world/world-model';
+import { SelfModel } from '../self/self-model';
+import { GoalStack } from '../goals/goal-stack';
+import { HeuristicPlanner } from '../goals/planner';
 import type { MemoryManager } from '../memory/memory-manager';
-import type { WorldModel } from '../world/world-model';
-import type { SelfModel } from '../self/self-model';
-import type { Planner } from '../goals/planner';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/security';
 import type { AgentDecision } from '../core/contracts/agent';
@@ -62,7 +62,7 @@ export async function buildServer() {
     }
 
     const { observation, goal } = parsed.data;
-    const goalStack = container.resolve<GoalStack>('goalStack');
+    const goalStack = new GoalStack();
     if (goal) {
       try {
         goalStack.addGoal({
@@ -83,13 +83,17 @@ export async function buildServer() {
       events: observation.events
     }, toolRunner);
 
+    const worldModel = new RuleBasedWorldModel();
+    const selfModel = new SelfModel();
+    const planner = new HeuristicPlanner(worldModel);
+
     const agent = new CognitiveAgent({
       environment,
       memoryManager: container.resolve<MemoryManager>('memoryManager'),
-      worldModel: container.resolve<WorldModel>('worldModel'),
-      selfModel: container.resolve<SelfModel>('selfModel'),
+      worldModel,
+      selfModel,
       goalStack,
-      planner: container.resolve<Planner>('planner'),
+      planner,
       llmAdapter: container.resolve<LLMAdapter>('llmAdapter'),
       promptFilter: container.resolve<PromptInjectionFilter>('promptFilter'),
       outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),

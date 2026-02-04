@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrl } from '../../security/ssrf-protection';
+import { isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface AnthropicEmbeddingConfig {
   apiKey: string;
@@ -40,11 +40,11 @@ export class AnthropicAdapter implements LLMAdapter {
     this.anthropicVersion = options.anthropicVersion ?? '2023-06-01';
     this.embedding = options.embedding;
 
-    if (!isSafeUrl(this.baseUrl)) {
+    if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe Anthropic base URL');
     }
 
-    if (this.embedding && !isSafeUrl(this.embedding.baseUrl)) {
+    if (this.embedding && !isSafeUrlBasic(this.embedding.baseUrl)) {
       throw new Error('Unsafe embedding base URL');
     }
   }

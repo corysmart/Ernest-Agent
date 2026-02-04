@@ -118,7 +118,6 @@ export class MemoryManager {
     }
 
     const embedding = await this.embeddingProvider.embed(memory.content);
-    await this.repository.save(memory);
     await this.vectorStore.upsert([
       {
         id: memory.id,
@@ -129,5 +128,16 @@ export class MemoryManager {
         }
       }
     ]);
+
+    try {
+      await this.repository.save(memory);
+    } catch (error) {
+      try {
+        await this.vectorStore.delete(memory.id);
+      } catch {
+        // Best-effort rollback; preserve original error.
+      }
+      throw error;
+    }
   }
 }
