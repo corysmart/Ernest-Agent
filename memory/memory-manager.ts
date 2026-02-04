@@ -11,6 +11,14 @@ export interface MemoryPoisoningGuard {
   assess(content: string): { allowed: boolean; reasons: string[] };
 }
 
+export interface IMemoryManager {
+  addEpisodic(memory: MemoryItem): Promise<void>;
+  addSemantic(memory: MemoryItem): Promise<void>;
+  addProcedural(memory: MemoryItem): Promise<void>;
+  query(query: MemoryQuery): Promise<MemorySearchResult[]>;
+  injectForPrompt(query: MemoryQuery): Promise<string>;
+}
+
 interface MemoryManagerOptions {
   repository: MemoryRepository;
   vectorStore: VectorStore;
@@ -19,7 +27,7 @@ interface MemoryManagerOptions {
   halfLifeMs?: number;
 }
 
-export class MemoryManager {
+export class MemoryManager implements IMemoryManager {
   private readonly repository: MemoryRepository;
   private readonly vectorStore: VectorStore;
   private readonly embeddingProvider: EmbeddingProvider;

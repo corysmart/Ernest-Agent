@@ -3,7 +3,7 @@ import type { LLMAdapter, PromptRequest } from '../contracts/llm';
 import type { PromptInjectionFilter, OutputValidator, ToolPermissionGate } from '../contracts/security';
 import type { AgentDecision, AgentLoopResult, AgentState } from '../contracts/agent';
 import type { Environment } from '../../env/environment';
-import type { MemoryManager } from '../../memory/memory-manager';
+import type { IMemoryManager } from '../../memory/memory-manager';
 import type { WorldModel } from '../../world/world-model';
 import type { GoalStack } from '../../goals/goal-stack';
 import type { Planner } from '../../goals/planner';
@@ -12,7 +12,7 @@ import type { GoalReference } from '../../memory/types';
 
 interface CognitiveAgentOptions {
   environment: Environment;
-  memoryManager: MemoryManager;
+  memoryManager: IMemoryManager;
   worldModel: WorldModel;
   selfModel: SelfModel;
   goalStack: GoalStack;

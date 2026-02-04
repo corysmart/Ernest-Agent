@@ -1,6 +1,6 @@
 import type { LLMAdapter, LLMResponse, PromptMessage, PromptRequest } from '../../core/contracts/llm';
 import { DEFAULT_MAX_TOKENS, countApproxTokens } from '../../core/contracts/llm';
-import { isSafeUrlBasic } from '../../security/ssrf-protection';
+import { isSafeUrl, isSafeUrlBasic } from '../../security/ssrf-protection';
 
 interface OpenAIAdapterOptions {
   apiKey: string;
@@ -36,6 +36,29 @@ export class OpenAIAdapter implements LLMAdapter {
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');
     }
+  }
+
+  /**
+   * Async factory method that validates DNS before constructing adapter.
+   * Use this instead of constructor to prevent SSRF DNS rebinding attacks.
+   */
+  static async create(options: OpenAIAdapterOptions & { resolveDns?: boolean }): Promise<OpenAIAdapter> {
+    const baseUrl = options.baseUrl ?? 'https://api.openai.com/v1';
+    
+    // Always do basic validation
+    if (!isSafeUrlBasic(baseUrl)) {
+      throw new Error('Unsafe OpenAI base URL');
+    }
+
+    // If DNS resolution is enabled (default), validate DNS to prevent rebinding
+    if (options.resolveDns !== false) {
+      const isSafe = await isSafeUrl(baseUrl);
+      if (!isSafe) {
+        throw new Error(`Unsafe OpenAI base URL: ${baseUrl} resolves to private IP`);
+      }
+    }
+
+    return new OpenAIAdapter(options);
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {
