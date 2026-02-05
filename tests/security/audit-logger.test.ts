@@ -1,4 +1,5 @@
 import { StructuredAuditLogger } from '../../security/audit-logger';
+import type { AuditLogger, AuditLogEntry } from '../../security/audit-logger';
 
 describe('Audit Logger', () => {
   let logger: StructuredAuditLogger;
@@ -162,6 +163,175 @@ describe('Audit Logger', () => {
     const timestamp = new Date(logData.timestamp).getTime();
     expect(timestamp).toBeGreaterThanOrEqual(beforeTime);
     expect(timestamp).toBeLessThanOrEqual(afterTime);
+  });
+
+  describe('P2: Sensitive data redaction', () => {
+    it('redacts sensitive fields from tool call input', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          apiKey: 'secret-key-123',
+          password: 'mypassword',
+          goalId: 'goal-1',
+          safeField: 'safe-value'
+        },
+        success: true
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.input.apiKey).toBe('[REDACTED]');
+      expect(logData.data.input.password).toBe('[REDACTED]');
+      expect(logData.data.input.goalId).toBe('goal-1');
+      expect(logData.data.input.safeField).toBe('safe-value');
+    });
+
+    it('redacts sensitive fields from tool call output', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: { goalId: 'goal-1' },
+        output: {
+          access_token: 'token-123',
+          secret: 'my-secret',
+          result: 'success'
+        },
+        success: true
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.output.access_token).toBe('[REDACTED]');
+      expect(logData.data.output.secret).toBe('[REDACTED]');
+      expect(logData.data.output.result).toBe('success');
+    });
+
+    it('redacts nested sensitive fields', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          config: {
+            apiKey: 'secret-key',
+            endpoint: 'https://api.example.com'
+          },
+          safeData: 'value'
+        },
+        success: true
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.input.config.apiKey).toBe('[REDACTED]');
+      expect(logData.data.input.config.endpoint).toBe('https://api.example.com');
+      expect(logData.data.input.safeData).toBe('value');
+    });
+
+    it('supports field allowlist for tool calls', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          apiKey: 'secret-key',
+          goalId: 'goal-1',
+          otherField: 'value'
+        },
+        success: true,
+        redactionOptions: {
+          allowlist: ['goalId']
+        }
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      // Only goalId should be logged (allowlist)
+      expect(logData.data.input.goalId).toBe('goal-1');
+      expect(logData.data.input.apiKey).toBeUndefined();
+      expect(logData.data.input.otherField).toBeUndefined();
+    });
+
+    it('redacts sensitive fields from error context', () => {
+      logger.logError({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        error: 'API call failed',
+        context: {
+          password: 'secret-password',
+          errorCode: '500',
+          apiKey: 'key-123'
+        }
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.context.password).toBe('[REDACTED]');
+      expect(logData.data.context.apiKey).toBe('[REDACTED]');
+      expect(logData.data.context.errorCode).toBe('500');
+    });
+
+    it('supports custom redaction function', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          customField: 'value',
+          otherField: 'other'
+        },
+        success: true,
+        redactionOptions: {
+          redactFn: (key, value) => {
+            if (key === 'customField') {
+              return '[CUSTOM_REDACTED]';
+            }
+            return value;
+          }
+        }
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.input.customField).toBe('[CUSTOM_REDACTED]');
+      expect(logData.data.input.otherField).toBe('other');
+    });
+
+    it('uses default redaction options from constructor', () => {
+      const customLogger = new (class implements AuditLogger {
+        log(entry: AuditLogEntry): void {
+          console.log(`[AUDIT] ${JSON.stringify(entry)}`);
+        }
+      })();
+      
+      const loggerWithDefaults = new StructuredAuditLogger(
+        customLogger,
+        { sensitiveFields: ['custom'] }
+      );
+
+      loggerWithDefaults.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          custom: 'should-be-redacted',
+          apiKey: 'should-be-redacted',
+          safe: 'safe-value'
+        },
+        success: true
+      });
+
+      const logCall = consoleLogSpy.mock.calls[consoleLogSpy.mock.calls.length - 1]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      // 'custom' should be redacted (from constructor options)
+      expect(logData.data.input.custom).toBe('[REDACTED]');
+      // 'apiKey' should also be redacted (from default patterns)
+      expect(logData.data.input.apiKey).toBe('[REDACTED]');
+      expect(logData.data.input.safe).toBe('safe-value');
+    });
   });
 });
 

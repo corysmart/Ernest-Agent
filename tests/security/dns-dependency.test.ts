@@ -1,32 +1,40 @@
 import { buildContainer } from '../../server/container';
+import * as ssrfProtection from '../../security/ssrf-protection';
 
 describe('DNS Dependency in Container', () => {
+  let isSafeUrlSpy: jest.SpyInstance;
+
   beforeEach(() => {
     // Clear environment
     delete process.env.LLM_PROVIDER;
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.LOCAL_LLM_URL;
+    delete process.env.SSRF_RESOLVE_DNS;
+    
+    // Mock DNS validation to avoid real network calls in tests
+    // This makes tests deterministic and work offline
+    isSafeUrlSpy = jest.spyOn(ssrfProtection, 'isSafeUrl').mockResolvedValue(true);
   });
 
-  it('P3: buildContainer always resolves DNS which can fail in restrictive environments', async () => {
-    // This test documents the vulnerability: buildContainer always resolves DNS
-    // which can fail in restrictive/offline environments
-    
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('P1: buildContainer works offline when DNS is mocked', async () => {
+    // Mock DNS to avoid real network calls - makes test deterministic and offline-safe
     process.env.LLM_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.OPENAI_MODEL = 'gpt-4';
     process.env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
     process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
     
-    // Currently buildContainer always calls isSafeUrl which resolves DNS
-    // In restrictive environments this could fail, but there's no way to disable it
-    // This test verifies the current behavior - DNS resolution happens
+    // With mocked DNS, this should work offline
     const container = await buildContainer();
     expect(container).toBeDefined();
     
-    // The vulnerability: if DNS fails, buildContainer will fail
-    // There's no resolveDns=false option to skip DNS resolution
+    // Verify DNS validation was called (but mocked, so no real network request)
+    expect(isSafeUrlSpy).toHaveBeenCalled();
   });
 
   it('P3: buildContainer supports resolveDns=false option to skip DNS resolution', async () => {
@@ -68,16 +76,11 @@ describe('DNS Dependency in Container', () => {
     process.env.LLM_PROVIDER = 'local';
     process.env.LOCAL_LLM_URL = 'https://nonexistent-domain-that-will-fail-dns-12345.invalid';
     
+    // Mock DNS to fail (simulating offline/restrictive environment)
+    isSafeUrlSpy.mockResolvedValueOnce(false);
+    
     // With resolveDns=true (default), DNS failure should cause error
-    // Note: This may pass if DNS lookup succeeds or times out gracefully
-    // The important thing is that resolveDns=false option exists
-    try {
-      await buildContainer({ resolveDns: true });
-      // If it doesn't throw, that's okay - DNS might resolve or timeout gracefully
-    } catch (error) {
-      // Expected: DNS lookup failure
-      expect(error).toBeDefined();
-    }
+    await expect(buildContainer({ resolveDns: true })).rejects.toThrow();
   });
 });
 
