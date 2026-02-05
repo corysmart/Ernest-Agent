@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { buildContainer } from './container';
 import { CognitiveAgent } from '../core/agent/cognitive-agent';
@@ -42,6 +42,53 @@ const runOnceSchema = z.object({
   tenantId: z.string().min(1).optional()
 });
 
+/**
+ * P1: Authentication middleware - validates auth token and extracts tenantId from authenticated principal.
+ * Currently supports API key authentication via Authorization header.
+ * Can be extended to support JWT, OAuth, etc.
+ */
+interface AuthenticatedRequest {
+  tenantId?: string;
+  principal?: string;
+}
+
+function authenticateRequest(request: FastifyRequest): AuthenticatedRequest | null {
+  const authHeader = request.headers.authorization;
+  
+  if (!authHeader) {
+    return null; // No auth header - anonymous request
+  }
+
+  // Support "Bearer <token>" or "ApiKey <key>" format
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2) {
+    return null; // Invalid format
+  }
+
+  const [scheme, token] = parts;
+  
+  // P1: API Key authentication (can be extended to JWT, OAuth, etc.)
+  if (scheme === 'ApiKey' || scheme === 'Bearer') {
+    // For now, validate against environment variable API_KEY
+    // In production, this should validate against a database or auth service
+    const validApiKey = process.env.API_KEY;
+    if (validApiKey && token === validApiKey) {
+      // Extract tenantId from token or use a mapping
+      // For now, use a simple format: "tenant-<id>" or extract from token payload
+      // In production, decode JWT or query auth service for tenantId
+      const tenantMatch = token.match(/tenant[_-]?([a-zA-Z0-9-]+)/i);
+      const tenantId = tenantMatch ? tenantMatch[1] : undefined;
+      
+      return {
+        tenantId,
+        principal: `api-key:${token.substring(0, 8)}...`
+      };
+    }
+  }
+
+  return null; // Invalid or missing auth
+}
+
 export async function buildServer() {
   const fastify = Fastify({ logger: true });
   const { container, rateLimiter, toolRunner } = await buildContainer();
@@ -66,23 +113,28 @@ export async function buildServer() {
 
     const { observation, goal, tenantId: clientTenantId } = parsed.data;
     
-    // P2: Security: tenantId is client-controlled and unauthenticated.
-    // Until authentication is implemented, reject client-supplied tenantId to prevent
-    // cross-tenant data access. Use request-scoped IDs for anonymous requests only.
-    // TODO: Once authentication is added, bind tenantId to authenticated principal.
+    // P1: Authenticate request and bind tenantId to authenticated principal
+    const auth = authenticateRequest(request);
+    
+    // If client supplies tenantId, it must match authenticated tenantId
     if (clientTenantId) {
-      reply.code(403).send({ 
-        error: 'Tenant ID authentication not yet implemented. Client-supplied tenantId is rejected for security.',
-        hint: 'Remove tenantId from request or wait for authentication support'
-      });
-      return;
+      if (!auth || auth.tenantId !== clientTenantId) {
+        reply.code(403).send({ 
+          error: 'Tenant ID mismatch. Client-supplied tenantId must match authenticated principal.',
+          hint: 'Remove tenantId from request body or ensure it matches your authenticated tenant'
+        });
+        return;
+      }
     }
+    
+    // Use authenticated tenantId, fallback to request-scoped ID for anonymous requests
+    const tenantId = auth?.tenantId;
     
     // Create scoped memory manager for tenant isolation
     // For anonymous requests, use request-scoped ID and skip persistence
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const persistMemory = false; // Always false until auth is implemented
+    const requestId = tenantId ?? `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const persistMemory = Boolean(tenantId); // Persist memory only for authenticated tenants
     const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId, persistMemory);
     
     // Create audit logger for this request

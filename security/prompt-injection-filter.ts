@@ -16,10 +16,14 @@ export class PromptInjectionFilter {
     }
 
     const reasons: string[] = [];
+    // P3: Use global regexes or loop replacements to catch all matches, not just the first
     for (const pattern of PATTERNS) {
-      if (pattern.regex.test(sanitized)) {
+      // Create a global version of the regex to match all occurrences
+      const globalRegex = new RegExp(pattern.regex.source, pattern.regex.flags + 'g');
+      if (globalRegex.test(sanitized)) {
         reasons.push(pattern.reason);
-        sanitized = sanitized.replace(pattern.regex, '[FILTERED]');
+        // Replace all matches, not just the first
+        sanitized = sanitized.replace(globalRegex, '[FILTERED]');
       }
     }
 

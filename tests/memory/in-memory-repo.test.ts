@@ -44,7 +44,7 @@ describe('InMemoryMemoryRepository', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('rejects duplicate ids to prevent poisoning', async () => {
+  it('P3: upserts duplicate ids to align with Postgres repository behavior', async () => {
     const repo = new InMemoryMemoryRepository();
     const memory: EpisodicMemory = {
       id: 'dup',
@@ -56,6 +56,12 @@ describe('InMemoryMemoryRepository', () => {
 
     await repo.save(memory);
 
-    await expect(repo.save({ ...memory, content: 'Second' })).rejects.toThrow('Memory with id already exists');
+    // P3: Should upsert (update) instead of throwing, matching Postgres behavior
+    await expect(repo.save({ ...memory, content: 'Second' })).resolves.not.toThrow();
+    
+    // Verify the memory was updated
+    const results = await repo.getByIds(['dup']);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.content).toBe('Second');
   });
 });

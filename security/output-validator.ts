@@ -1,4 +1,5 @@
 import type { ZodSchema } from 'zod';
+import { assertSafeObject } from './validation';
 
 export class ZodOutputValidator<T> {
   constructor(private readonly schema: ZodSchema<T>) {}
@@ -9,6 +10,14 @@ export class ZodOutputValidator<T> {
       parsed = JSON.parse(output);
     } catch (error) {
       return { success: false, errors: ['Invalid JSON output'] };
+    }
+
+    // P2: Validate parsed output for unsafe keys and depth before schema validation
+    // This prevents prototype pollution and DoS attacks from malicious model responses
+    try {
+      assertSafeObject(parsed);
+    } catch (error) {
+      return { success: false, errors: [`Unsafe object detected: ${error instanceof Error ? error.message : 'Unknown error'}`] };
     }
 
     const result = this.schema.safeParse(parsed);

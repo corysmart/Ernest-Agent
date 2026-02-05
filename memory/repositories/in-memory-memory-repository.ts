@@ -5,10 +5,8 @@ export class InMemoryMemoryRepository implements MemoryRepository {
   private readonly memories = new Map<string, MemoryItem>();
 
   async save(memory: MemoryItem): Promise<void> {
-    if (this.memories.has(memory.id)) {
-      throw new Error('Memory with id already exists');
-    }
-
+    // P3: Align behavior with Postgres repository - use upsert instead of throwing on duplicates
+    // This prevents test/prod behavioral drift where tests fail fast but prod overwrites
     this.memories.set(memory.id, { ...memory });
   }
 
