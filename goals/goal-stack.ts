@@ -43,7 +43,16 @@ export class GoalStack {
   }
 
   listGoals(): Goal[] {
-    return [...this.goals.values()];
+    // P3: Return defensive copies to prevent callers from mutating internal state
+    // This preserves invariants and prevents external modification without validation
+    return [...this.goals.values()].map((goal) => ({
+      ...goal,
+      // Deep copy candidateActions if present to prevent mutation
+      candidateActions: goal.candidateActions?.map((action) => ({
+        ...action,
+        payload: action.payload ? JSON.parse(JSON.stringify(action.payload)) : undefined
+      }))
+    }));
   }
 }
 

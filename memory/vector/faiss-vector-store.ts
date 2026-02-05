@@ -29,7 +29,13 @@ export class FaissVectorStore implements VectorStore {
   async query(vector: number[], options: { topK: number; filter?: Record<string, string> }): Promise<VectorQueryResult[]> {
     validateVector(vector);
 
-    const result = await this.index.search(vector, options.topK);
+    // P3: Oversample when filtering to prevent dilution of scoped/filtered recall
+    // If filtering is enabled, query more results than requested to account for filtered-out items
+    // This ensures we can return topK results even after filtering
+    const oversampleFactor = options.filter ? 3 : 1; // Query 3x more when filtering
+    const queryK = options.topK * oversampleFactor;
+    
+    const result = await this.index.search(vector, queryK);
     const output: VectorQueryResult[] = [];
 
     for (let i = 0; i < result.ids.length; i += 1) {
@@ -43,6 +49,11 @@ export class FaissVectorStore implements VectorStore {
         continue;
       }
       output.push({ id, score: distanceToSimilarity(distance), metadata });
+      
+      // Stop once we have enough results after filtering
+      if (output.length >= options.topK) {
+        break;
+      }
     }
 
     return output;

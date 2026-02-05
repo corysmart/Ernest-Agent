@@ -77,8 +77,8 @@ export class CognitiveAgent {
         goals: goalRefs
       });
 
-      transition('update_world');
-      const worldState = this.options.worldModel.update(observation);
+            transition('update_world');
+            let worldState = this.options.worldModel.update(observation);
       transition('update_self');
       const selfSnapshot = this.options.selfModel.snapshot();
 
@@ -182,7 +182,9 @@ export class CognitiveAgent {
 
       transition('act');
       const actionResult = await this.options.environment.act(action);
-      this.options.worldModel.updateFromResult(worldState, { success: actionResult.success, observation: actionResult.observation });
+      // P2: Assign returned state to keep world model synchronized
+      // This ensures the world model state is updated even when no observation is provided
+      worldState = this.options.worldModel.updateFromResult(worldState, { success: actionResult.success, observation: actionResult.observation });
 
       transition('store_results');
       await this.options.memoryManager.addEpisodic({
