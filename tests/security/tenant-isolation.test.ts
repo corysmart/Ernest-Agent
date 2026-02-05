@@ -61,5 +61,30 @@ describe('Tenant Isolation', () => {
     });
     expect(request1Results.some((r) => r.memory.id === 'request-1-memory')).toBe(true);
   });
+
+  it('P2: ScopedMemoryManager skips persistence when persist=false', async () => {
+    const { container } = await buildContainer();
+    const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
+
+    // Create non-persisting manager (for anonymous requests)
+    const nonPersistingManager = new ScopedMemoryManager(baseMemoryManager, 'anonymous-request', false);
+
+    // Add memory - should not persist
+    await nonPersistingManager.addEpisodic({
+      id: 'temp-memory',
+      type: 'episodic',
+      content: 'Temporary data',
+      createdAt: Date.now(),
+      eventType: 'observation'
+    });
+
+    // Query should return empty (memory not persisted)
+    const results = await nonPersistingManager.query({
+      text: 'Temporary',
+      limit: 10
+    });
+
+    expect(results).toHaveLength(0);
+  });
 });
 

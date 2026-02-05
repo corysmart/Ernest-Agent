@@ -41,6 +41,28 @@ export class CognitiveAgent {
       const observation = await this.options.environment.observe();
       transition('retrieve_memory');
       const sanitized = this.options.promptFilter.sanitize(JSON.stringify(observation));
+      
+      // Act on prompt injection detection
+      if (sanitized.flagged) {
+        this.options.auditLogger?.logError({
+          tenantId: this.options.tenantId,
+          requestId: this.options.requestId,
+          error: 'Prompt injection detected',
+          context: {
+            reasons: sanitized.reasons,
+            flagged: true
+          }
+        });
+        
+        // Block execution when prompt injection is detected
+        transition('error');
+        return {
+          status: 'error',
+          error: `Prompt injection detected: ${sanitized.reasons.join('; ')}`,
+          stateTrace
+        };
+      }
+      
       const goals = this.options.goalStack.listGoals();
       const goalRefs: GoalReference[] = goals.map((goal) => ({
         id: goal.id,

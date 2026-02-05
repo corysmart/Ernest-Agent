@@ -144,14 +144,39 @@ export class StructuredAuditLogger implements AuditLogger {
     };
     goalId?: string;
     stateTrace?: string[];
+    /**
+     * Optional redaction options for this specific decision log.
+     * If not provided, uses default redaction options from constructor.
+     */
+    redactionOptions?: RedactionOptions;
   }): void {
+    // Use decision-specific redaction options or fall back to default
+    const redactionOpts = params.redactionOptions ?? this.redactionOptions;
+
+    // Redact sensitive fields from actionPayload and reasoning
+    const redactedPayload = params.decision.actionPayload
+      ? redactObject(params.decision.actionPayload, redactionOpts) as Record<string, unknown>
+      : undefined;
+    
+    // Reasoning is a string, but could contain sensitive data - redact if it's an object
+    const redactedReasoning = params.decision.reasoning
+      ? (typeof params.decision.reasoning === 'object'
+          ? redactObject(params.decision.reasoning, redactionOpts)
+          : params.decision.reasoning)
+      : undefined;
+
     this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
       requestId: params.requestId,
       eventType: 'agent_decision',
       data: {
-        decision: params.decision,
+        decision: {
+          actionType: params.decision.actionType,
+          actionPayload: redactedPayload,
+          confidence: params.decision.confidence,
+          reasoning: redactedReasoning
+        },
         goalId: params.goalId,
         stateTrace: params.stateTrace
       }

@@ -332,6 +332,47 @@ describe('Audit Logger', () => {
       expect(logData.data.input.apiKey).toBe('[REDACTED]');
       expect(logData.data.input.safe).toBe('safe-value');
     });
+
+    it('redacts sensitive fields from agent decision actionPayload', () => {
+      logger.logAgentDecision({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        decision: {
+          actionType: 'api_call',
+          actionPayload: {
+            apiKey: 'secret-key-123',
+            password: 'mypassword',
+            goalId: 'goal-1',
+            safeField: 'safe-value'
+          },
+          confidence: 0.9
+        },
+        goalId: 'goal-1'
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.decision.actionPayload.apiKey).toBe('[REDACTED]');
+      expect(logData.data.decision.actionPayload.password).toBe('[REDACTED]');
+      expect(logData.data.decision.actionPayload.goalId).toBe('goal-1');
+      expect(logData.data.decision.actionPayload.safeField).toBe('safe-value');
+    });
+
+    it('preserves reasoning string when it does not contain sensitive data', () => {
+      logger.logAgentDecision({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        decision: {
+          actionType: 'pursue_goal',
+          reasoning: 'This is a safe reasoning string'
+        },
+        goalId: 'goal-1'
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      expect(logData.data.decision.reasoning).toBe('This is a safe reasoning string');
+    });
   });
 });
 

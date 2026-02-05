@@ -6,6 +6,8 @@ import type { GoalStack } from '../../goals/goal-stack';
 import type { Planner } from '../../goals/planner';
 import type { LLMAdapter } from '../../core/contracts/llm';
 import type { PromptInjectionFilter, OutputValidator, ToolPermissionGate } from '../../core/contracts/security';
+import { StructuredAuditLogger } from '../../security/audit-logger';
+import type { StructuredAuditLogger as StructuredAuditLoggerType } from '../../security/audit-logger';
 import { SelfModel } from '../../self/self-model';
 
 const observation = { timestamp: 1, state: { status: 'ok' } };
@@ -20,6 +22,9 @@ function buildAgent(overrides: Partial<{
   promptFilter: PromptInjectionFilter;
   outputValidator: OutputValidator<any>;
   permissionGate: ToolPermissionGate;
+  auditLogger?: StructuredAuditLoggerType;
+  tenantId?: string;
+  requestId?: string;
 }> = {}) {
   const environment: Environment = overrides.environment ?? {
     observe: async () => observation,
@@ -92,7 +97,10 @@ function buildAgent(overrides: Partial<{
     llmAdapter,
     promptFilter,
     outputValidator,
-    permissionGate
+    permissionGate,
+    auditLogger: overrides.auditLogger,
+    tenantId: overrides.tenantId,
+    requestId: overrides.requestId
   });
 }
 
@@ -124,7 +132,7 @@ describe('CognitiveAgent', () => {
       promptFilter: {
         sanitize: (input: string) => {
           sanitizedInput = input.replace('attack', '');
-          return { sanitized: sanitizedInput, flagged: true, reasons: ['prompt-injection'] };
+          return { sanitized: sanitizedInput, flagged: false, reasons: [] };
         }
       },
       environment: {
@@ -136,5 +144,34 @@ describe('CognitiveAgent', () => {
     await agent.runOnce();
 
     expect(sanitizedInput).not.toContain('attack');
+  });
+
+  it('P3: blocks execution when prompt injection is detected', async () => {
+    const loggedErrors: any[] = [];
+    const auditLogger = new StructuredAuditLogger();
+    const logErrorSpy = jest.spyOn(auditLogger, 'logError').mockImplementation((params: any) => {
+      loggedErrors.push(params);
+    });
+    
+    const agent = buildAgent({
+      promptFilter: {
+        sanitize: (input: string) => ({
+          sanitized: input,
+          flagged: true,
+          reasons: ['suspicious-pattern', 'injection-attempt']
+        })
+      },
+      auditLogger
+    });
+
+    const result = await agent.runOnce();
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('Prompt injection detected');
+    expect(loggedErrors).toHaveLength(1);
+    expect(loggedErrors[0]!.error).toBe('Prompt injection detected');
+    expect(loggedErrors[0]!.context.reasons).toEqual(['suspicious-pattern', 'injection-attempt']);
+    
+    logErrorSpy.mockRestore();
   });
 });

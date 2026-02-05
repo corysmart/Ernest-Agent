@@ -67,9 +67,11 @@ export async function buildServer() {
     const { observation, goal, tenantId } = parsed.data;
     
     // Create scoped memory manager for tenant isolation
+    // For anonymous requests (no tenantId), skip persistence to prevent unbounded memory growth
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
     const requestId = tenantId ?? `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId);
+    const persistMemory = Boolean(tenantId); // Only persist if tenantId is provided
+    const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId, persistMemory);
     
     // Create audit logger for this request
     const auditLogger = new StructuredAuditLogger();
@@ -122,7 +124,24 @@ export async function buildServer() {
 
     const result = await agent.runOnce();
 
-    reply.send(result);
+    // Return appropriate HTTP status codes based on agent result
+    if (result.status === 'error') {
+      // Client errors (4xx) vs server errors (5xx) based on error type
+      const statusCode = result.error?.includes('Invalid') || result.error?.includes('not permitted')
+        ? 400 // Bad request for validation/permission errors
+        : 500; // Internal server error for other failures
+      reply.code(statusCode).send(result);
+      return;
+    }
+
+    if (result.status === 'idle') {
+      // No goals to process - not an error, but might want to indicate no action taken
+      reply.code(200).send(result);
+      return;
+    }
+
+    // Success case
+    reply.code(200).send(result);
   });
 
   return fastify;

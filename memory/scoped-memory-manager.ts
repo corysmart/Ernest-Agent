@@ -4,11 +4,15 @@ import type { MemoryItem, MemoryQuery, MemorySearchResult } from './types';
 /**
  * ScopedMemoryManager wraps a MemoryManager to enforce tenant/request isolation.
  * It prefixes memory IDs with the scope to prevent cross-contamination.
+ * 
+ * If `persist` is false, memories are not persisted (useful for anonymous/one-off requests
+ * to prevent unbounded memory growth).
  */
 export class ScopedMemoryManager implements IMemoryManager {
   constructor(
     private readonly baseManager: IMemoryManager,
-    private readonly scope: string
+    private readonly scope: string,
+    private readonly persist: boolean = true
   ) {
     if (!scope || scope.includes(':')) {
       throw new Error('Scope must be non-empty and not contain colons');
@@ -27,6 +31,9 @@ export class ScopedMemoryManager implements IMemoryManager {
   }
 
   async addEpisodic(memory: MemoryItem): Promise<void> {
+    if (!this.persist) {
+      return; // Skip persistence for anonymous/one-off requests
+    }
     const scopedMemory = {
       ...memory,
       id: this.scopeId(memory.id)
@@ -35,6 +42,9 @@ export class ScopedMemoryManager implements IMemoryManager {
   }
 
   async addSemantic(memory: MemoryItem): Promise<void> {
+    if (!this.persist) {
+      return; // Skip persistence for anonymous/one-off requests
+    }
     const scopedMemory = {
       ...memory,
       id: this.scopeId(memory.id)
@@ -43,6 +53,9 @@ export class ScopedMemoryManager implements IMemoryManager {
   }
 
   async addProcedural(memory: MemoryItem): Promise<void> {
+    if (!this.persist) {
+      return; // Skip persistence for anonymous/one-off requests
+    }
     const scopedMemory = {
       ...memory,
       id: this.scopeId(memory.id)

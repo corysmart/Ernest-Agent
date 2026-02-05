@@ -1,17 +1,30 @@
 interface RateLimiterOptions {
   capacity: number;
   refillPerSecond: number;
+  /**
+   * Maximum number of buckets to keep in memory. When exceeded, oldest buckets are evicted.
+   * Default: 10000
+   */
+  maxBuckets?: number;
+  /**
+   * TTL for buckets in milliseconds. Buckets older than this are evicted.
+   * Default: 1 hour (3600000ms)
+   */
+  bucketTtlMs?: number;
 }
 
 interface Bucket {
   tokens: number;
   lastRefill: number;
+  createdAt: number;
 }
 
 export class RateLimiter {
   private readonly capacity: number;
   private readonly refillPerSecond: number;
   private readonly buckets = new Map<string, Bucket>();
+  private readonly maxBuckets: number;
+  private readonly bucketTtlMs: number;
   private timeOffsetMs = 0;
 
   constructor(options: RateLimiterOptions) {
@@ -24,11 +37,21 @@ export class RateLimiter {
 
     this.capacity = options.capacity;
     this.refillPerSecond = options.refillPerSecond;
+    this.maxBuckets = options.maxBuckets ?? 10000;
+    this.bucketTtlMs = options.bucketTtlMs ?? 3600000; // 1 hour default
   }
 
   consume(key: string, tokens: number = 1): boolean {
     if (tokens <= 0) {
       return true;
+    }
+
+    // Evict old buckets before processing
+    this.evictOldBuckets();
+
+    // Enforce max bucket limit with LRU eviction
+    if (this.buckets.size >= this.maxBuckets && !this.buckets.has(key)) {
+      this.evictOldestBucket();
     }
 
     const bucket = this.getBucket(key);
@@ -54,10 +77,48 @@ export class RateLimiter {
 
     const bucket: Bucket = {
       tokens: this.capacity,
-      lastRefill: this.now()
+      lastRefill: this.now(),
+      createdAt: this.now()
     };
     this.buckets.set(key, bucket);
     return bucket;
+  }
+
+  /**
+   * Evicts buckets that are older than TTL
+   */
+  private evictOldBuckets(): void {
+    const now = this.now();
+    const keysToDelete: string[] = [];
+
+    for (const [key, bucket] of this.buckets.entries()) {
+      if (now - bucket.createdAt > this.bucketTtlMs) {
+        keysToDelete.push(key);
+      }
+    }
+
+    for (const key of keysToDelete) {
+      this.buckets.delete(key);
+    }
+  }
+
+  /**
+   * Evicts the oldest bucket (LRU eviction)
+   */
+  private evictOldestBucket(): void {
+    let oldestKey: string | undefined;
+    let oldestTime = Infinity;
+
+    for (const [key, bucket] of this.buckets.entries()) {
+      if (bucket.createdAt < oldestTime) {
+        oldestTime = bucket.createdAt;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      this.buckets.delete(oldestKey);
+    }
   }
 
   private refill(bucket: Bucket): void {

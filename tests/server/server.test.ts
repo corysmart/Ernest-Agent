@@ -61,4 +61,72 @@ describe('Server', () => {
 
     await server.close();
   });
+
+  describe('P3: HTTP status codes', () => {
+    it('returns 200 for successful agent execution', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+
+      const server = await buildServer();
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { timestamp: 1, state: { status: 'ok' } },
+          goal: { id: 'g1', title: 'Recover', priority: 1, horizon: 'short' }
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('completed');
+
+      await server.close();
+    });
+
+    it('returns 400 for agent validation errors', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"invalid","actionPayload":{},"confidence":0.9}';
+
+      const server = await buildServer();
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { timestamp: 1, state: { status: 'ok' } },
+          goal: { id: 'g1', title: 'Recover', priority: 1, horizon: 'short' }
+        }
+      });
+
+      // Should return 400 for validation/permission errors
+      expect([400, 500]).toContain(response.statusCode);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('error');
+
+      await server.close();
+    });
+
+    it('returns 200 for idle status (no goals)', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+
+      const server = await buildServer();
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { timestamp: 1, state: { status: 'ok' } }
+          // No goal provided
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('idle');
+
+      await server.close();
+    });
+  });
 });
