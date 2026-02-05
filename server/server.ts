@@ -64,13 +64,25 @@ export async function buildServer() {
       return;
     }
 
-    const { observation, goal, tenantId } = parsed.data;
+    const { observation, goal, tenantId: clientTenantId } = parsed.data;
+    
+    // P2: Security: tenantId is client-controlled and unauthenticated.
+    // Until authentication is implemented, reject client-supplied tenantId to prevent
+    // cross-tenant data access. Use request-scoped IDs for anonymous requests only.
+    // TODO: Once authentication is added, bind tenantId to authenticated principal.
+    if (clientTenantId) {
+      reply.code(403).send({ 
+        error: 'Tenant ID authentication not yet implemented. Client-supplied tenantId is rejected for security.',
+        hint: 'Remove tenantId from request or wait for authentication support'
+      });
+      return;
+    }
     
     // Create scoped memory manager for tenant isolation
-    // For anonymous requests (no tenantId), skip persistence to prevent unbounded memory growth
+    // For anonymous requests, use request-scoped ID and skip persistence
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
-    const requestId = tenantId ?? `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const persistMemory = Boolean(tenantId); // Only persist if tenantId is provided
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const persistMemory = false; // Always false until auth is implemented
     const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId, persistMemory);
     
     // Create audit logger for this request
@@ -98,7 +110,7 @@ export async function buildServer() {
       events: observation.events
     }, toolRunner, {
       auditLogger,
-      tenantId: tenantId,
+      tenantId: undefined, // tenantId is undefined until auth is implemented
       requestId
     });
 
@@ -118,7 +130,7 @@ export async function buildServer() {
       outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),
       permissionGate: container.resolve<ToolPermissionGate>('permissionGate'),
       auditLogger,
-      tenantId: tenantId,
+      tenantId: undefined, // tenantId is undefined until auth is implemented
       requestId
     });
 

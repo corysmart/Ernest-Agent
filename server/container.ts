@@ -46,7 +46,8 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   const toolRunner = new SandboxedToolRunner({
     tools: {
       pursue_goal: async (input) => ({ acknowledged: true, input })
-    }
+    },
+    timeoutMs: Number(process.env.TOOL_TIMEOUT_MS ?? 30000) // 30 seconds default
   });
   const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
 

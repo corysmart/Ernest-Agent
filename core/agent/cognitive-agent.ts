@@ -42,7 +42,7 @@ export class CognitiveAgent {
       transition('retrieve_memory');
       const sanitized = this.options.promptFilter.sanitize(JSON.stringify(observation));
       
-      // Act on prompt injection detection
+      // P2: Act on prompt injection detection - block execution and log
       if (sanitized.flagged) {
         this.options.auditLogger?.logError({
           tenantId: this.options.tenantId,
@@ -54,7 +54,7 @@ export class CognitiveAgent {
           }
         });
         
-        // Block execution when prompt injection is detected
+        // Block execution when prompt injection is detected - do not proceed with flagged input
         transition('error');
         return {
           status: 'error',
@@ -63,6 +63,7 @@ export class CognitiveAgent {
         };
       }
       
+      // Only proceed with memory retrieval if input is not flagged
       const goals = this.options.goalStack.listGoals();
       const goalRefs: GoalReference[] = goals.map((goal) => ({
         id: goal.id,

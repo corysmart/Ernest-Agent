@@ -64,6 +64,47 @@ const DEFAULT_SENSITIVE_FIELDS = [
 ];
 
 /**
+ * Redacts sensitive patterns from a string.
+ * Looks for common patterns like API keys, tokens, passwords, etc.
+ */
+function redactString(text: string, options: RedactionOptions = {}): string {
+  const sensitiveFields = options.sensitiveFields
+    ? [...DEFAULT_SENSITIVE_FIELDS, ...options.sensitiveFields]
+    : DEFAULT_SENSITIVE_FIELDS;
+
+  // Common patterns for secrets in text (API keys, tokens, etc.)
+  // Match patterns like: "apiKey: sk-...", "token=abc123", "password: secret"
+  let redacted = text;
+
+  // Check for common secret patterns in the string
+  for (const pattern of sensitiveFields) {
+    const lowerPattern = pattern.toLowerCase();
+    // Match patterns like "apikey: value", "token=value", "password: value", etc.
+    const regex = new RegExp(`(${lowerPattern}\\s*[:=]\\s*)([^\\s,;}\\]\\)]+)`, 'gi');
+    redacted = redacted.replace(regex, (match, prefix, value) => {
+      // If value looks like a secret (long alphanumeric, contains dashes/underscores, etc.)
+      if (value.length > 8 || /[-_]/i.test(value)) {
+        return `${prefix}[REDACTED]`;
+      }
+      return match;
+    });
+  }
+
+  // Also check for standalone secrets (long alphanumeric strings that might be tokens)
+  // Match strings like "sk-1234567890abcdef" or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+  redacted = redacted.replace(/\b([a-zA-Z0-9_-]{20,})\b/g, (match) => {
+    // If it looks like a token/key (long alphanumeric), redact it
+    // But preserve common safe patterns like URLs, UUIDs in specific formats
+    if (!match.match(/^https?:\/\//) && !match.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return '[REDACTED]';
+    }
+    return match;
+  });
+
+  return redacted;
+}
+
+/**
  * Redacts sensitive fields from an object recursively
  */
 function redactObject(obj: unknown, options: RedactionOptions = {}): unknown {
@@ -158,11 +199,11 @@ export class StructuredAuditLogger implements AuditLogger {
       ? redactObject(params.decision.actionPayload, redactionOpts) as Record<string, unknown>
       : undefined;
     
-    // Reasoning is a string, but could contain sensitive data - redact if it's an object
+    // Reasoning can be a string or object - redact sensitive data from both
     const redactedReasoning = params.decision.reasoning
       ? (typeof params.decision.reasoning === 'object'
           ? redactObject(params.decision.reasoning, redactionOpts)
-          : params.decision.reasoning)
+          : redactString(String(params.decision.reasoning), redactionOpts))
       : undefined;
 
     this.logger.log({

@@ -373,6 +373,45 @@ describe('Audit Logger', () => {
       const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
       expect(logData.data.decision.reasoning).toBe('This is a safe reasoning string');
     });
+
+    it('P2: redacts sensitive patterns from reasoning strings', () => {
+      logger.logAgentDecision({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        decision: {
+          actionType: 'api_call',
+          reasoning: 'Using apiKey: sk-1234567890abcdef to authenticate. Token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
+        },
+        goalId: 'goal-1'
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      const reasoning = logData.data.decision.reasoning as string;
+      // Should redact API keys and tokens
+      expect(reasoning).toContain('[REDACTED]');
+      expect(reasoning).not.toContain('sk-1234567890abcdef');
+      expect(reasoning).not.toContain('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
+    });
+
+    it('P2: redacts long alphanumeric strings that look like tokens from reasoning', () => {
+      logger.logAgentDecision({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        decision: {
+          actionType: 'api_call',
+          reasoning: 'The authentication token is abc123def456ghi789jkl012mno345pqr678'
+        },
+        goalId: 'goal-1'
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      const reasoning = logData.data.decision.reasoning as string;
+      // Should redact long token-like strings
+      expect(reasoning).toContain('[REDACTED]');
+      expect(reasoning).not.toContain('abc123def456ghi789jkl012mno345pqr678');
+    });
   });
 });
 
