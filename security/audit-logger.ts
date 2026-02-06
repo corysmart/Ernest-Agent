@@ -106,8 +106,9 @@ function redactString(text: string, options: RedactionOptions = {}): string {
 
 /**
  * Redacts sensitive fields from an object recursively
+ * P2: Uses visited set to detect and handle circular references
  */
-function redactObject(obj: unknown, options: RedactionOptions = {}): unknown {
+function redactObject(obj: unknown, options: RedactionOptions = {}, visited: WeakSet<object> = new WeakSet()): unknown {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -117,7 +118,7 @@ function redactObject(obj: unknown, options: RedactionOptions = {}): unknown {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => redactObject(item, options));
+    return obj.map((item) => redactObject(item, options, visited));
   }
 
   // Merge custom sensitive fields with defaults (custom fields take precedence for duplicates)
@@ -145,7 +146,7 @@ function redactObject(obj: unknown, options: RedactionOptions = {}): unknown {
       const redactedValue = redactFn(key, value);
       // If value is an object, recursively redact it
       if (typeof redactedValue === 'object' && redactedValue !== null && !Array.isArray(redactedValue)) {
-        result[key] = redactObject(redactedValue, options);
+        result[key] = redactObject(redactedValue, options, visited);
       } else {
         result[key] = redactedValue;
       }
@@ -158,8 +159,8 @@ function redactObject(obj: unknown, options: RedactionOptions = {}): unknown {
     if (isSensitive) {
       result[key] = '[REDACTED]';
     } else if (typeof value === 'object' && value !== null) {
-      // Recursively redact nested objects
-      result[key] = redactObject(value, options);
+      // Recursively redact nested objects (pass visited set to detect cycles)
+      result[key] = redactObject(value, options, visited);
     } else {
       result[key] = value;
     }

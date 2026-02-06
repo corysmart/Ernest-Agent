@@ -26,6 +26,9 @@ export class RateLimiter {
   private readonly maxBuckets: number;
   private readonly bucketTtlMs: number;
   private timeOffsetMs = 0;
+  // P3: Amortized cleanup - track last cleanup time to avoid O(N) scans on every request
+  private lastCleanupTime = 0;
+  private readonly cleanupIntervalMs = 60000; // Cleanup every 60 seconds
 
   constructor(options: RateLimiterOptions) {
     if (options.capacity <= 0) {
@@ -46,8 +49,13 @@ export class RateLimiter {
       return true;
     }
 
-    // Evict old buckets before processing
-    this.evictOldBuckets();
+    // P3: Amortized cleanup - only run cleanup periodically instead of on every request
+    // This reduces O(N) scans from every request to amortized O(1) per request
+    const now = this.now();
+    if (now - this.lastCleanupTime >= this.cleanupIntervalMs) {
+      this.evictOldBuckets();
+      this.lastCleanupTime = now;
+    }
 
     // Enforce max bucket limit with LRU eviction
     if (this.buckets.size >= this.maxBuckets && !this.buckets.has(key)) {

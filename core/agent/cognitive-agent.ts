@@ -93,18 +93,33 @@ export class CognitiveAgent {
         ? goal.candidateActions.map((action) => ({ type: action.type, payload: action.payload }))
         : [{ type: 'pursue_goal', payload: { goalId: goal.id } }];
 
-      this.options.planner.plan(goal, {
+      // P2: Use planner output - store plan as procedural memory and include in prompt
+      const plan = this.options.planner.plan(goal, {
         worldState,
         self: selfSnapshot,
         candidateActions
       });
+
+      // Store plan as procedural memory for future reference
+      if (plan.steps && plan.steps.length > 0) {
+        await this.options.memoryManager.addProcedural({
+          id: randomUUID(),
+          type: 'procedural',
+          content: `Plan for goal ${goal.id}: ${plan.steps.map((step) => step.description).join('; ')}`,
+          createdAt: Date.now(),
+          planSummary: plan.steps.map((step) => step.description).join('; '),
+          successRate: 0.5 // Initial success rate
+        });
+      }
 
       transition('query_llm');
       const systemPrompt = buildSystemPrompt({
         memoryContext,
         worldState,
         selfSnapshot,
-        goal
+        goal,
+        plan, // Include plan in system prompt
+        promptFilter: this.options.promptFilter // Pass prompt filter for sanitization
       });
       const userPrompt = sanitized.sanitized;
 
@@ -229,16 +244,31 @@ function buildSystemPrompt(args: {
   worldState: unknown;
   selfSnapshot: unknown;
   goal: { title: string; description?: string };
+  plan?: { steps: Array<{ description: string }> };
+  promptFilter: PromptInjectionFilter;
 }): string {
+  // P2: Sanitize goal/memory content before including in system prompt
+  // This prevents prompt injection via user-supplied goals or poisoned memory
+  const sanitizedGoalTitle = args.promptFilter.sanitize(args.goal.title).sanitized;
+  const sanitizedGoalDesc = args.goal.description ? args.promptFilter.sanitize(args.goal.description).sanitized : undefined;
+  const sanitizedMemoryContext = args.memoryContext ? args.promptFilter.sanitize(args.memoryContext).sanitized : '';
+
   const parts = [
     'You are an agent that must output a JSON object with keys: actionType, actionPayload, confidence, reasoning.',
-    `Goal: ${args.goal.title}${args.goal.description ? ` - ${args.goal.description}` : ''}`,
+    `Goal: ${sanitizedGoalTitle}${sanitizedGoalDesc ? ` - ${sanitizedGoalDesc}` : ''}`,
     `WorldState: ${JSON.stringify(args.worldState)}`,
     `SelfModel: ${JSON.stringify(args.selfSnapshot)}`
   ];
 
-  if (args.memoryContext) {
-    parts.push(`Memory:\n${args.memoryContext}`);
+  // Include plan if available
+  if (args.plan && args.plan.steps && args.plan.steps.length > 0) {
+    const planDescription = args.plan.steps.map((step) => step.description).join('; ');
+    const sanitizedPlan = args.promptFilter.sanitize(planDescription).sanitized;
+    parts.push(`Plan: ${sanitizedPlan}`);
+  }
+
+  if (sanitizedMemoryContext) {
+    parts.push(`Memory:\n${sanitizedMemoryContext}`);
   }
 
   return parts.join('\n');

@@ -31,8 +31,19 @@ export interface BuildContainerOptions {
 export async function buildContainer(options: BuildContainerOptions = {}): Promise<ContainerContext> {
   const container = new Container();
 
+  // P2: Use persistent vector store when DATABASE_URL is set to prevent desync
+  // After restart, embeddings would be lost with LocalVectorStore while structured memory persists
+  // TODO: Implement PostgresVectorStore or pgvector integration for true persistence
+  // For now, LocalVectorStore is used but this causes desync on restart
   const vectorStore = new LocalVectorStore();
   const memoryRepository = await buildMemoryRepository();
+  
+  // If DATABASE_URL is set, warn about vector store desync
+  if (process.env.DATABASE_URL && memoryRepository instanceof PostgresMemoryRepository) {
+    // In production, consider implementing a persistent vector store (e.g., pgvector)
+    // or a re-index step on startup to rebuild embeddings from stored memories
+    console.warn('[WARNING] Using in-memory vector store with Postgres repository. Embeddings will be lost on restart.');
+  }
   const llmAdapter = await buildLlmAdapter(options);
   const embeddingProvider = await buildEmbeddingProvider(llmAdapter, options);
   const memoryManager = new MemoryManager({
