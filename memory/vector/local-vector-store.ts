@@ -18,7 +18,7 @@ export class LocalVectorStore implements VectorStore {
     }
   }
 
-  async query(vector: number[], options: { topK: number; filter?: Record<string, string> }): Promise<VectorQueryResult[]> {
+  async query(vector: number[], options: { topK: number; filter?: Record<string, string | string[]> }): Promise<VectorQueryResult[]> {
     this.validateVector(vector);
     this.setDimension(vector.length);
     const queryNorm = vectorNorm(vector);
@@ -68,10 +68,20 @@ function vectorNorm(vector: number[]): number {
   return Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
 }
 
-function matchesFilter(metadata: Record<string, string> | undefined, filter: Record<string, string>): boolean {
+function matchesFilter(metadata: Record<string, string> | undefined, filter: Record<string, string | string[]>): boolean {
   if (!metadata) {
     return false;
   }
 
-  return Object.entries(filter).every(([key, value]) => metadata[key] === value);
+  return Object.entries(filter).every(([key, value]) => {
+    const metadataValue = metadata[key];
+    if (metadataValue === undefined) {
+      return false;
+    }
+    // P3: Support array values for multi-type filtering (e.g., type: ['episodic', 'semantic'])
+    if (Array.isArray(value)) {
+      return value.includes(metadataValue);
+    }
+    return metadataValue === value;
+  });
 }

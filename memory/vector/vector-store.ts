@@ -12,6 +12,6 @@ export interface VectorQueryResult {
 
 export interface VectorStore {
   upsert(records: VectorRecord[]): Promise<void>;
-  query(vector: number[], options: { topK: number; filter?: Record<string, string> }): Promise<VectorQueryResult[]>;
+  query(vector: number[], options: { topK: number; filter?: Record<string, string | string[]> }): Promise<VectorQueryResult[]>;
   delete(id: string): Promise<void>;
 }
