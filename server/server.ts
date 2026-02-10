@@ -95,9 +95,15 @@ function authenticateRequest(request: FastifyRequest): AuthenticatedRequest | nu
   return null; // Invalid or missing auth
 }
 
-export async function buildServer() {
-  const fastify = Fastify({ logger: true });
-  const { container, rateLimiter, toolRunner } = await buildContainer();
+export async function buildServer(options?: { logger?: boolean }) {
+  const fastify = Fastify({ logger: options?.logger ?? true });
+  const containerContext = await buildContainer();
+  const { container, rateLimiter, toolRunner } = containerContext;
+  
+  // Register cleanup on server close
+  fastify.addHook('onClose', async () => {
+    await containerContext.cleanup();
+  });
 
   fastify.addHook('onRequest', (request, reply, done) => {
     if (!rateLimiter.consume(request.ip, 1)) {
@@ -136,12 +142,17 @@ export async function buildServer() {
     // Use authenticated tenantId, fallback to request-scoped ID for anonymous requests
     const tenantId = auth?.tenantId;
     
+    // P3: Generate unique requestId per request to prevent collisions
+    // Multiple requests from the same tenant should have different requestIds for proper audit traceability
+    // Keep tenantId separate from requestId to avoid masking cross-request behavior in logs
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
     // Create scoped memory manager for tenant isolation
-    // For anonymous requests, use request-scoped ID and skip persistence
+    // Use tenantId as scope if authenticated, otherwise use requestId
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
-    const requestId = tenantId ?? `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const memoryScope = tenantId ?? requestId;
     const persistMemory = Boolean(tenantId); // Persist memory only for authenticated tenants
-    const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, requestId, persistMemory);
+    const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, memoryScope, persistMemory);
     
     // Create audit logger for this request
     const auditLogger = new StructuredAuditLogger();

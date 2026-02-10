@@ -22,6 +22,11 @@ export interface ContainerContext {
   container: Container;
   rateLimiter: RateLimiter;
   toolRunner: SandboxedToolRunner;
+  /**
+   * Cleanup method to close database connections and other resources.
+   * Should be called when the container is no longer needed (e.g., in test teardown).
+   */
+  cleanup(): Promise<void>;
 }
 
 export interface BuildContainerOptions {
@@ -36,7 +41,7 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   // TODO: Implement PostgresVectorStore or pgvector integration for true persistence
   // For now, LocalVectorStore is used but this causes desync on restart
   const vectorStore = new LocalVectorStore();
-  const memoryRepository = await buildMemoryRepository();
+  const { repository: memoryRepository, pool } = await buildMemoryRepository();
   
   // If DATABASE_URL is set, warn about vector store desync
   if (process.env.DATABASE_URL && memoryRepository instanceof PostgresMemoryRepository) {
@@ -70,23 +75,48 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   container.registerValue('outputValidator', outputValidator);
   container.registerValue('permissionGate', permissionGate);
 
+  // P2: Validate rate limiter config to prevent NaN from disabling throttling
+  // Use Number.isFinite to ensure valid numeric values, fail fast on invalid config
+  const capacityRaw = Number(process.env.RATE_LIMIT_CAPACITY ?? 60);
+  const refillRaw = Number(process.env.RATE_LIMIT_REFILL ?? 1);
+  
+  if (!Number.isFinite(capacityRaw) || capacityRaw <= 0) {
+    throw new Error(`Invalid RATE_LIMIT_CAPACITY: ${process.env.RATE_LIMIT_CAPACITY}. Must be a positive number.`);
+  }
+  if (!Number.isFinite(refillRaw) || refillRaw < 0) {
+    throw new Error(`Invalid RATE_LIMIT_REFILL: ${process.env.RATE_LIMIT_REFILL}. Must be a non-negative number.`);
+  }
+  
   const rateLimiter = new RateLimiter({
-    capacity: Number(process.env.RATE_LIMIT_CAPACITY ?? 60),
-    refillPerSecond: Number(process.env.RATE_LIMIT_REFILL ?? 1)
+    capacity: capacityRaw,
+    refillPerSecond: refillRaw
   });
 
-  return { container, rateLimiter, toolRunner };
+  return {
+    container,
+    rateLimiter,
+    toolRunner,
+    async cleanup() {
+      // Close Postgres pool if it exists
+      if (pool) {
+        await pool.end();
+      }
+      // Clear DNS validation caches in adapters to prevent memory leaks
+      // Note: This is a workaround - ideally adapters would expose cleanup methods
+      // For now, the caches are module-level and will be garbage collected when modules are unloaded
+    }
+  };
 }
 
-async function buildMemoryRepository() {
+async function buildMemoryRepository(): Promise<{ repository: InMemoryMemoryRepository | PostgresMemoryRepository; pool?: Pool }> {
   if (process.env.DATABASE_URL) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const repo = new PostgresMemoryRepository(pool);
     await repo.ensureSchema();
-    return repo;
+    return { repository: repo, pool };
   }
 
-  return new InMemoryMemoryRepository();
+  return { repository: new InMemoryMemoryRepository() };
 }
 
 async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLMAdapter> {

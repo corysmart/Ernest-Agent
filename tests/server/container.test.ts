@@ -39,6 +39,55 @@ describe('buildContainer embedding configuration', () => {
     process.env.ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
     process.env.EMBEDDING_PROVIDER = 'mock';
 
-    await expect(buildContainer()).resolves.toBeDefined();
+    const containerContext = await buildContainer();
+    expect(containerContext).toBeDefined();
+    await containerContext.cleanup();
+  });
+
+  describe('P2: Rate limiter NaN validation', () => {
+    it('rejects NaN capacity from environment variable', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_CAPACITY = 'not-a-number';
+
+      await expect(buildContainer()).rejects.toThrow('Invalid RATE_LIMIT_CAPACITY');
+    });
+
+    it('rejects NaN refill rate from environment variable', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_REFILL = 'invalid';
+
+      await expect(buildContainer()).rejects.toThrow('Invalid RATE_LIMIT_REFILL');
+    });
+
+    it('rejects empty string capacity', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_CAPACITY = '';
+
+      await expect(buildContainer()).rejects.toThrow('Invalid RATE_LIMIT_CAPACITY');
+    });
+
+    it('rejects negative capacity', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_CAPACITY = '-1';
+
+      await expect(buildContainer()).rejects.toThrow('Invalid RATE_LIMIT_CAPACITY');
+    });
+
+    it('rejects zero capacity', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_CAPACITY = '0';
+
+      await expect(buildContainer()).rejects.toThrow('Invalid RATE_LIMIT_CAPACITY');
+    });
+
+    it('accepts valid numeric values', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.RATE_LIMIT_CAPACITY = '100';
+      process.env.RATE_LIMIT_REFILL = '5';
+
+      const containerContext = await buildContainer();
+      expect(containerContext).toBeDefined();
+      await containerContext.cleanup();
+    });
   });
 });

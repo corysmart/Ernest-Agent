@@ -134,8 +134,10 @@ function redactObject(obj: unknown, options: RedactionOptions = {}, visited: Wea
     const lowerKey = key.toLowerCase();
 
     // If allowlist is specified, only include allowed fields
+    // P3: Use exact key matching (case-insensitive) instead of substring matching
+    // This prevents 'id' from matching 'access_token_id' or 'id_token'
     if (allowlist && allowlist.length > 0) {
-      const isAllowed = allowlist.some((allowed) => lowerKey.includes(allowed.toLowerCase()));
+      const isAllowed = allowlist.some((allowed) => lowerKey === allowed.toLowerCase());
       if (!isAllowed) {
         continue;
       }

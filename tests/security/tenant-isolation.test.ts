@@ -4,7 +4,8 @@ import type { MemoryManager } from '../../memory/memory-manager';
 
 describe('Tenant Isolation', () => {
   it('P2: ScopedMemoryManager prevents cross-tenant memory contamination', async () => {
-    const { container } = await buildContainer();
+    const containerContext = await buildContainer();
+    const { container } = containerContext;
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
 
     // Create scoped managers for two different tenants
@@ -28,10 +29,13 @@ describe('Tenant Isolation', () => {
 
     // After fix: tenant B should not see tenant A's data
     expect(results.some((r) => r.memory.id === 'tenant-a-memory')).toBe(false);
+    
+    await containerContext.cleanup();
   });
 
   it('P2: ScopedMemoryManager isolates memories between different scopes', async () => {
-    const { container } = await buildContainer();
+    const containerContext = await buildContainer();
+    const { container } = containerContext;
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
 
     const request1Manager = new ScopedMemoryManager(baseMemoryManager, 'request-1');
@@ -60,10 +64,13 @@ describe('Tenant Isolation', () => {
       limit: 10
     });
     expect(request1Results.some((r) => r.memory.id === 'request-1-memory')).toBe(true);
+    
+    await containerContext.cleanup();
   });
 
   it('P2: ScopedMemoryManager skips persistence when persist=false', async () => {
-    const { container } = await buildContainer();
+    const containerContext = await buildContainer();
+    const { container } = containerContext;
     const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
 
     // Create non-persisting manager (for anonymous requests)
@@ -85,6 +92,8 @@ describe('Tenant Isolation', () => {
     });
 
     expect(results).toHaveLength(0);
+    
+    await containerContext.cleanup();
   });
 });
 

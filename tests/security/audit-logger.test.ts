@@ -255,6 +255,32 @@ describe('Audit Logger', () => {
       expect(logData.data.input.otherField).toBeUndefined();
     });
 
+    it('P3: allowlist uses exact key matching (not substring)', () => {
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'api_call',
+        input: {
+          id: 'user-123',
+          access_token_id: 'secret-token-id',
+          id_token: 'jwt-token',
+          user_id: 'user-456'
+        },
+        success: true,
+        redactionOptions: {
+          allowlist: ['id']
+        }
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      // Only exact 'id' key should be allowed, not substrings
+      expect(logData.data.input.id).toBe('user-123');
+      expect(logData.data.input.access_token_id).toBeUndefined();
+      expect(logData.data.input.id_token).toBeUndefined();
+      expect(logData.data.input.user_id).toBeUndefined();
+    });
+
     it('redacts sensitive fields from error context', () => {
       logger.logError({
         tenantId: 'tenant-123',

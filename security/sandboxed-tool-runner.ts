@@ -33,19 +33,34 @@ export class SandboxedToolRunner {
     assertSafeObject(input);
 
     // Wrap tool execution in a timeout promise
+    // Store timeout ID so we can clear it if the tool completes before timeout
+    let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
     });
 
-    // Race between tool execution and timeout
-    const result = await Promise.race([
-      handler(input),
-      timeoutPromise
-    ]);
+    try {
+      // Race between tool execution and timeout
+      const result = await Promise.race([
+        handler(input),
+        timeoutPromise
+      ]);
 
-    assertSafeObject(result);
-    return result;
+      // Clear timeout if tool completed successfully
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      assertSafeObject(result);
+      return result;
+    } catch (error) {
+      // Clear timeout on error as well
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      throw error;
+    }
   }
 }

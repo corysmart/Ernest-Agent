@@ -10,12 +10,38 @@ export class InMemoryMessageBus implements MessageBus {
       return;
     }
 
+    // P3: Clone message for each handler to prevent mutation by handlers
+    // If one handler mutates the payload, subsequent handlers should observe original data
+    // Each handler gets its own cloned message to ensure complete isolation
+    const clonePayload = (payload: Record<string, unknown> | undefined): Record<string, unknown> => {
+      if (!payload) {
+        return {};
+      }
+      // Use structuredClone if available (handles circular refs better), otherwise fall back to JSON
+      try {
+        if (typeof structuredClone !== 'undefined') {
+          return structuredClone(payload);
+        } else {
+          return JSON.parse(JSON.stringify(payload));
+        }
+      } catch (error) {
+        // If cloning fails (e.g., circular refs), use shallow copy as fallback
+        return { ...payload };
+      }
+    };
+
     // P2: Isolate handler failures to prevent one failure from blocking other subscribers
     // Each handler is wrapped in try/catch to ensure all subscribers receive the message
+    // Each handler gets its own cloned message to prevent cross-handler mutation
     const errors: Error[] = [];
     handlers.forEach((handler) => {
       try {
-        handler(message);
+        // Clone message for each handler to ensure complete isolation
+        const clonedMessage: AgentMessage = {
+          ...message,
+          payload: clonePayload(message.payload)
+        };
+        handler(clonedMessage);
       } catch (error) {
         // Log error but continue processing other handlers
         errors.push(error instanceof Error ? error : new Error(String(error)));

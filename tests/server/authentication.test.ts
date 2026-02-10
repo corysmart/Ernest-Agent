@@ -6,7 +6,7 @@ describe('Server Authentication', () => {
   beforeEach(async () => {
     // Clear API_KEY env var
     delete process.env.API_KEY;
-    server = await buildServer();
+    server = await buildServer({ logger: false });
   });
 
   afterEach(async () => {

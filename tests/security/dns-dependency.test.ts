@@ -30,11 +30,13 @@ describe('DNS Dependency in Container', () => {
     process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
     
     // With mocked DNS, this should work offline
-    const container = await buildContainer();
-    expect(container).toBeDefined();
+    const containerContext = await buildContainer();
+    expect(containerContext).toBeDefined();
     
     // Verify DNS validation was called (but mocked, so no real network request)
     expect(isSafeUrlSpy).toHaveBeenCalled();
+    
+    await containerContext.cleanup();
   });
 
   it('P3: buildContainer supports resolveDns=false option to skip DNS resolution', async () => {
@@ -47,8 +49,10 @@ describe('DNS Dependency in Container', () => {
     process.env.SSRF_RESOLVE_DNS = 'false';
     
     // After fix: this should work without DNS resolution
-    const container = await buildContainer({ resolveDns: false });
-    expect(container).toBeDefined();
+    const containerContext = await buildContainer({ resolveDns: false });
+    expect(containerContext).toBeDefined();
+    
+    await containerContext.cleanup();
   });
 
   it('P3: buildContainer supports resolveDns via options parameter', async () => {
@@ -59,8 +63,10 @@ describe('DNS Dependency in Container', () => {
     process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
     
     // Can pass resolveDns option directly
-    const container = await buildContainer({ resolveDns: false });
-    expect(container).toBeDefined();
+    const containerContext = await buildContainer({ resolveDns: false });
+    expect(containerContext).toBeDefined();
+    
+    await containerContext.cleanup();
   });
 
   it('P3: buildContainer handles DNS lookup failures with resolveDns=false', async () => {
@@ -68,8 +74,10 @@ describe('DNS Dependency in Container', () => {
     process.env.LOCAL_LLM_URL = 'https://nonexistent-domain-that-will-fail-dns-12345.invalid';
     
     // With resolveDns=false, should work even if DNS would fail
-    const container = await buildContainer({ resolveDns: false });
-    expect(container).toBeDefined();
+    const containerContext = await buildContainer({ resolveDns: false });
+    expect(containerContext).toBeDefined();
+    
+    await containerContext.cleanup();
   });
 
   it('P3: buildContainer fails DNS lookup when resolveDns=true and DNS fails', async () => {
