@@ -183,7 +183,7 @@ export class StructuredAuditLogger implements AuditLogger {
     private readonly redactionOptions: RedactionOptions = {}
   ) {}
 
-  logAgentDecision(params: {
+  async logAgentDecision(params: {
     tenantId?: string;
     requestId?: string;
     decision: {
@@ -199,7 +199,7 @@ export class StructuredAuditLogger implements AuditLogger {
      * If not provided, uses default redaction options from constructor.
      */
     redactionOptions?: RedactionOptions;
-  }): void {
+  }): Promise<void> {
     // Use decision-specific redaction options or fall back to default
     const redactionOpts = params.redactionOptions ?? this.redactionOptions;
 
@@ -215,7 +215,7 @@ export class StructuredAuditLogger implements AuditLogger {
           : redactString(String(params.decision.reasoning), redactionOpts))
       : undefined;
 
-    this.logger.log({
+    const result = this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
       requestId: params.requestId,
@@ -231,9 +231,12 @@ export class StructuredAuditLogger implements AuditLogger {
         stateTrace: params.stateTrace
       }
     });
+    if (result instanceof Promise) {
+      await result;
+    }
   }
 
-  logToolCall(params: {
+  async logToolCall(params: {
     tenantId?: string;
     requestId?: string;
     toolName: string;
@@ -246,7 +249,7 @@ export class StructuredAuditLogger implements AuditLogger {
      * If not provided, uses default redaction options from constructor.
      */
     redactionOptions?: RedactionOptions;
-  }): void {
+  }): Promise<void> {
     // Use tool-specific redaction options or fall back to default
     const redactionOpts = params.redactionOptions ?? this.redactionOptions;
 
@@ -273,7 +276,7 @@ export class StructuredAuditLogger implements AuditLogger {
     });
   }
 
-  logLLMRequest(params: {
+  async logLLMRequest(params: {
     tenantId?: string;
     requestId?: string;
     provider: string;
@@ -281,7 +284,7 @@ export class StructuredAuditLogger implements AuditLogger {
     tokensUsed?: number;
     success: boolean;
     error?: string;
-  }): void {
+  }): Promise<void> {
     this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
@@ -297,7 +300,7 @@ export class StructuredAuditLogger implements AuditLogger {
     });
   }
 
-  logError(params: {
+  async logError(params: {
     tenantId?: string;
     requestId?: string;
     error: string;
@@ -307,27 +310,40 @@ export class StructuredAuditLogger implements AuditLogger {
      * If not provided, uses default redaction options from constructor.
      */
     redactionOptions?: RedactionOptions;
-  }): void {
+  }): Promise<void> {
     // Use error-specific redaction options or fall back to default
     const redactionOpts = params.redactionOptions ?? this.redactionOptions;
+
+    // P2: Redact sensitive data from error strings
+    // Error messages can contain secrets, API keys, or other sensitive information
+    const redactedError = redactString(params.error, redactionOpts);
 
     // Redact sensitive fields from context
     const redactedContext = params.context ? redactObject(params.context, redactionOpts) as Record<string, unknown> : undefined;
 
-    this.logger.log({
+    const result = this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
       requestId: params.requestId,
       eventType: 'error',
       data: {
-        error: params.error,
+        error: redactedError,
         context: redactedContext
       }
     });
+    if (result instanceof Promise) {
+      await result;
+    }
   }
 
-  log(entry: AuditLogEntry): void {
-    this.logger.log(entry);
+  async log(entry: AuditLogEntry): Promise<void> {
+    // P2: Await async audit loggers to ensure logs are persisted
+    // Network loggers (e.g., sending to external service) need to be awaited
+    // to prevent log loss if the process exits before the async operation completes
+    const result = this.logger.log(entry);
+    if (result instanceof Promise) {
+      await result;
+    }
   }
 }
 

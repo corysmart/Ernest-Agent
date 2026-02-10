@@ -35,7 +35,7 @@ export class RequestEnvironment implements Environment {
       const outputs = await this.toolRunner.run(action.type, action.payload ?? {});
       
       // Log successful tool call
-      this.auditLogger?.logToolCall({
+      await this.auditLogger?.logToolCall({ // P2: Await async audit loggers
         tenantId: this.tenantId,
         requestId: this.requestId,
         toolName: action.type,
@@ -49,7 +49,7 @@ export class RequestEnvironment implements Environment {
       const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
       
       // Log failed tool call
-      this.auditLogger?.logToolCall({
+      await this.auditLogger?.logToolCall({ // P2: Await async audit loggers
         tenantId: this.tenantId,
         requestId: this.requestId,
         toolName: action.type,

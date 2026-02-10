@@ -149,7 +149,7 @@ describe('CognitiveAgent', () => {
   it('P3: blocks execution when prompt injection is detected', async () => {
     const loggedErrors: any[] = [];
     const auditLogger = new StructuredAuditLogger();
-    const logErrorSpy = jest.spyOn(auditLogger, 'logError').mockImplementation((params: any) => {
+    const logErrorSpy = jest.spyOn(auditLogger, 'logError').mockImplementation(async (params: any) => {
       loggedErrors.push(params);
     });
     

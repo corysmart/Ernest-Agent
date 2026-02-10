@@ -70,15 +70,28 @@ export class MemoryManager implements IMemoryManager {
 
     const embedding = await this.embeddingProvider.embed(query.text);
     
+    // P3: Filter by type before top-K search to prevent dilution
+    // If type filtering is needed, we need to either:
+    // 1. Filter at vector store level (if supported), or
+    // 2. Oversample to account for filtered-out results
+    const requestedLimit = query.limit ?? 5;
+    const hasTypeFilter = query.types && query.types.length > 0;
+    
     // Use scope filter if provided to ensure tenant-local recall
     const filter = query.scope ? { scope: query.scope } : undefined;
+    
+    // P3: Oversample when type filtering is needed to ensure we get enough results after filtering
+    // Estimate that ~1/3 of results might be filtered out, so query 3x more
+    const queryLimit = hasTypeFilter ? requestedLimit * 3 : requestedLimit;
+    
     const candidates = await this.vectorStore.query(embedding, { 
-      topK: query.limit ?? 5,
+      topK: queryLimit,
       filter
     });
     const memories = await this.repository.getByIds(candidates.map((candidate) => candidate.id));
 
     const now = Date.now();
+    // P3: Filter by type after retrieval (oversampling ensures we have enough results)
     const filtered = query.types && query.types.length
       ? memories.filter((memory) => query.types?.includes(memory.type))
       : memories;

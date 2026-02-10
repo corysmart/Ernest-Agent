@@ -36,18 +36,26 @@ export interface BuildContainerOptions {
 export async function buildContainer(options: BuildContainerOptions = {}): Promise<ContainerContext> {
   const container = new Container();
 
-  // P2: Use persistent vector store when DATABASE_URL is set to prevent desync
-  // After restart, embeddings would be lost with LocalVectorStore while structured memory persists
-  // TODO: Implement PostgresVectorStore or pgvector integration for true persistence
-  // For now, LocalVectorStore is used but this causes desync on restart
+  // P2: Vector store persistence mismatch handling
+  // When DATABASE_URL is set, we use PostgresMemoryRepository for structured memory,
+  // but LocalVectorStore for embeddings. This causes desync on restart because:
+  // - Structured memories persist in Postgres
+  // - Embeddings are lost when LocalVectorStore is cleared
+  // Solution: Use a persistent vector store (e.g., pgvector) or re-index on startup
   const vectorStore = new LocalVectorStore();
   const { repository: memoryRepository, pool } = await buildMemoryRepository();
   
-  // If DATABASE_URL is set, warn about vector store desync
+  // P2: Warn about vector store persistence mismatch
+  // This is a known limitation - in production, implement PostgresVectorStore with pgvector
+  // or add a re-indexing step on startup to rebuild embeddings from stored memories
   if (process.env.DATABASE_URL && memoryRepository instanceof PostgresMemoryRepository) {
-    // In production, consider implementing a persistent vector store (e.g., pgvector)
-    // or a re-index step on startup to rebuild embeddings from stored memories
-    console.warn('[WARNING] Using in-memory vector store with Postgres repository. Embeddings will be lost on restart.');
+    console.warn(
+      '[WARNING] Vector store persistence mismatch detected:\n' +
+      '  - Structured memories persist in Postgres\n' +
+      '  - Embeddings are stored in-memory and will be lost on restart\n' +
+      '  - This causes memory desync: memories exist but cannot be retrieved by similarity\n' +
+      '  - Solution: Implement PostgresVectorStore (pgvector) or add re-indexing on startup'
+    );
   }
   const llmAdapter = await buildLlmAdapter(options);
   const embeddingProvider = await buildEmbeddingProvider(llmAdapter, options);

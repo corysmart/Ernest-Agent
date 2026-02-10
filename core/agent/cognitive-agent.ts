@@ -44,7 +44,7 @@ export class CognitiveAgent {
       
       // P2: Act on prompt injection detection - block execution and log
       if (sanitized.flagged) {
-        this.options.auditLogger?.logError({
+        await this.options.auditLogger?.logError({
           tenantId: this.options.tenantId,
           requestId: this.options.requestId,
           error: 'Prompt injection detected',
@@ -139,7 +139,7 @@ export class CognitiveAgent {
         response = await this.options.llmAdapter.generate(request);
         
         // Log successful LLM request
-        this.options.auditLogger?.logLLMRequest({
+        await this.options.auditLogger?.logLLMRequest({
           tenantId: this.options.tenantId,
           requestId: this.options.requestId,
           provider: llmProvider,
@@ -149,7 +149,7 @@ export class CognitiveAgent {
         });
       } catch (llmError) {
         // Log LLM request failure
-        this.options.auditLogger?.logLLMRequest({
+        await this.options.auditLogger?.logLLMRequest({
           tenantId: this.options.tenantId,
           requestId: this.options.requestId,
           provider: llmProvider,
@@ -175,7 +175,7 @@ export class CognitiveAgent {
       }
 
       // Log agent decision
-      this.options.auditLogger?.logAgentDecision({
+      await this.options.auditLogger?.logAgentDecision({
         tenantId: this.options.tenantId,
         requestId: this.options.requestId,
         decision: {
@@ -224,7 +224,7 @@ export class CognitiveAgent {
       };
     } catch (error) {
       transition('error');
-      this.options.auditLogger?.logError({
+      await this.options.auditLogger?.logError({
         tenantId: this.options.tenantId,
         requestId: this.options.requestId,
         error: error instanceof Error ? error.message : 'Unknown error',

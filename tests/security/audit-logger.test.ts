@@ -300,6 +300,45 @@ describe('Audit Logger', () => {
       expect(logData.data.context.errorCode).toBe('500');
     });
 
+    it('P2: redacts sensitive data from error strings', async () => {
+      await logger.logError({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        error: 'API call failed with apiKey: sk-1234567890abcdef and token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+        context: { errorCode: '500' }
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      const error = logData.data.error as string;
+      // Error string should be redacted
+      expect(error).toContain('[REDACTED]');
+      expect(error).not.toContain('sk-1234567890abcdef');
+      expect(error).not.toContain('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
+    });
+
+    it('P2: awaits async audit loggers', async () => {
+      let logCompleted = false;
+      const asyncLogger = new (class implements AuditLogger {
+        async log(entry: AuditLogEntry): Promise<void> {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          console.log(`[AUDIT] ${JSON.stringify(entry)}`);
+          logCompleted = true;
+        }
+      })();
+      
+      const loggerWithAsync = new StructuredAuditLogger(asyncLogger);
+
+      await loggerWithAsync.logError({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        error: 'Test error'
+      });
+
+      // If we didn't await, logCompleted would still be false
+      expect(logCompleted).toBe(true);
+    });
+
     it('supports custom redaction function', () => {
       logger.logToolCall({
         tenantId: 'tenant-123',

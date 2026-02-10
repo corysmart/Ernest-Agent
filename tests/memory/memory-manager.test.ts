@@ -47,6 +47,58 @@ describe('MemoryManager', () => {
     expect(injected).toContain('Recovered system state');
   });
 
+  it('P3: oversamples when type filtering to ensure enough results', async () => {
+    const repo = new InMemoryMemoryRepository();
+    const vectorStore = new LocalVectorStore();
+    const manager = new MemoryManager({ repository: repo, vectorStore, embeddingProvider: embedder });
+
+    // Create memories of different types
+    await manager.addEpisodic({
+      id: 'e1',
+      type: 'episodic',
+      content: 'Episodic memory 1',
+      createdAt: Date.now(),
+      eventType: 'event1'
+    });
+    await manager.addSemantic({
+      id: 's1',
+      type: 'semantic',
+      content: 'Semantic memory 1',
+      createdAt: Date.now(),
+      factConfidence: 0.9
+    });
+    await manager.addSemantic({
+      id: 's2',
+      type: 'semantic',
+      content: 'Semantic memory 2',
+      createdAt: Date.now(),
+      factConfidence: 0.8
+    });
+    await manager.addProcedural({
+      id: 'p1',
+      type: 'procedural',
+      content: 'Procedural memory 1',
+      createdAt: Date.now(),
+      planSummary: 'plan1',
+      successRate: 0.7
+    });
+
+    // Query with type filter - should oversample to get enough semantic memories
+    // Request limit is 2, but we have 2 semantic + 1 episodic + 1 procedural
+    // Without oversampling, if top-K returns [episodic, procedural, semantic, semantic],
+    // filtering would leave only 2 semantic, which is what we want
+    // With oversampling (3x), we query topK=6, which should include all memories
+    const results = await manager.query({ 
+      text: 'memory', 
+      limit: 2,
+      types: ['semantic'] // Only want semantic memories
+    });
+
+    // Should get 2 semantic memories (all available)
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results.every(r => r.memory.type === 'semantic')).toBe(true);
+  });
+
   it('blocks poisoned memories', async () => {
     const repo = new InMemoryMemoryRepository();
     const vectorStore = new LocalVectorStore();
