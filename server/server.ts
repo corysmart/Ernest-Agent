@@ -128,6 +128,16 @@ export async function buildServer(options?: { logger?: boolean }) {
     // P1: Authenticate request and bind tenantId to authenticated principal
     const auth = authenticateRequest(request);
     
+    // P1: Enforce authentication when API_KEY is configured
+    // If API_KEY is set, all requests must be authenticated to prevent auth bypass
+    if (process.env.API_KEY && !auth) {
+      reply.code(401).send({
+        error: 'Authentication required',
+        hint: 'API_KEY is configured. Please provide a valid Authorization header (ApiKey <key> or Bearer <token>)'
+      });
+      return;
+    }
+    
     // If client supplies tenantId, it must match authenticated tenantId
     if (clientTenantId) {
       if (!auth || auth.tenantId !== clientTenantId) {
@@ -139,7 +149,7 @@ export async function buildServer(options?: { logger?: boolean }) {
       }
     }
     
-    // Use authenticated tenantId, fallback to request-scoped ID for anonymous requests
+    // Use authenticated tenantId, fallback to request-scoped ID for anonymous requests (only when API_KEY is not set)
     const tenantId = auth?.tenantId;
     
     // P3: Generate unique requestId per request to prevent collisions
