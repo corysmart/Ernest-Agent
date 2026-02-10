@@ -2,9 +2,21 @@ import type { ZodSchema } from 'zod';
 import { assertSafeObject } from './validation';
 
 export class ZodOutputValidator<T> {
-  constructor(private readonly schema: ZodSchema<T>) {}
+  private readonly schema: ZodSchema<T>;
+  private readonly maxOutputLength: number;
+
+  constructor(schema: ZodSchema<T>, maxOutputLength: number = 1024 * 1024) {
+    this.schema = schema;
+    this.maxOutputLength = maxOutputLength; // Default: 1MB
+  }
 
   validate(output: string): { success: boolean; data?: T; errors?: string[] } {
+    // P2: Enforce maximum output length before parsing to prevent DoS
+    // A malicious or misconfigured model can return extremely large outputs
+    if (output.length > this.maxOutputLength) {
+      return { success: false, errors: [`Output exceeds maximum length of ${this.maxOutputLength} bytes`] };
+    }
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(output);

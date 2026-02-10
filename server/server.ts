@@ -39,7 +39,13 @@ const goalSchema = z.object({
 const runOnceSchema = z.object({
   observation: observationSchema,
   goal: goalSchema.optional(),
-  tenantId: z.string().min(1).optional()
+  // P3: Validate tenantId to reject colons (ScopedMemoryManager rejects scopes with colons)
+  // Also add max length to prevent abuse
+  tenantId: z.string()
+    .min(1)
+    .max(256)
+    .refine((val) => !val.includes(':'), { message: 'tenantId cannot contain colons' })
+    .optional()
 });
 
 /**

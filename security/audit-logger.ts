@@ -245,6 +245,10 @@ export class StructuredAuditLogger implements AuditLogger {
     // Redact sensitive fields from input and output
     const redactedInput = redactObject(params.input, redactionOpts) as Record<string, unknown>;
     const redactedOutput = params.output ? redactObject(params.output, redactionOpts) as Record<string, unknown> : undefined;
+    
+    // P2: Redact error strings to prevent secrets from leaking into audit logs
+    // Error messages can contain tokens, credentials, or PII from tool failures
+    const redactedError = params.error ? redactString(params.error, redactionOpts) : undefined;
 
     this.logger.log({
       timestamp: Date.now(),
@@ -256,7 +260,7 @@ export class StructuredAuditLogger implements AuditLogger {
         input: redactedInput,
         output: redactedOutput,
         success: params.success,
-        error: params.error
+        error: redactedError
       }
     });
   }

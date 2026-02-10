@@ -20,11 +20,24 @@ export class AgentRegistry {
   }
 
   list(): AgentProfile[] {
-    return [...this.agents.values()];
+    // P3: Return defensive copies to prevent external mutation of registry state
+    return [...this.agents.values()].map((agent) => ({
+      ...agent,
+      // Deep copy arrays to prevent mutation
+      allowedMemoryScopes: [...agent.allowedMemoryScopes],
+      capabilities: [...agent.capabilities]
+    }));
   }
 
   listByRole(role: string): AgentProfile[] {
-    return [...this.agents.values()].filter((agent) => agent.role === role);
+    // P3: Return defensive copies to prevent external mutation
+    return [...this.agents.values()]
+      .filter((agent) => agent.role === role)
+      .map((agent) => ({
+        ...agent,
+        allowedMemoryScopes: [...agent.allowedMemoryScopes],
+        capabilities: [...agent.capabilities]
+      }));
   }
 
   canAccessMemory(agentId: string, scope: string): boolean {
