@@ -261,7 +261,7 @@ export class StructuredAuditLogger implements AuditLogger {
     // Error messages can contain tokens, credentials, or PII from tool failures
     const redactedError = params.error ? redactString(params.error, redactionOpts) : undefined;
 
-    this.logger.log({
+    const result = this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
       requestId: params.requestId,
@@ -274,6 +274,10 @@ export class StructuredAuditLogger implements AuditLogger {
         error: redactedError
       }
     });
+    // P2: Await async audit loggers to ensure logs are persisted
+    if (result instanceof Promise) {
+      await result;
+    }
   }
 
   async logLLMRequest(params: {
@@ -285,7 +289,7 @@ export class StructuredAuditLogger implements AuditLogger {
     success: boolean;
     error?: string;
   }): Promise<void> {
-    this.logger.log({
+    const result = this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
       requestId: params.requestId,
@@ -298,6 +302,10 @@ export class StructuredAuditLogger implements AuditLogger {
         error: params.error
       }
     });
+    // P2: Await async audit loggers to ensure logs are persisted
+    if (result instanceof Promise) {
+      await result;
+    }
   }
 
   async logError(params: {

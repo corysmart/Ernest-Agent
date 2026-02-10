@@ -15,20 +15,18 @@ interface SandboxedToolRunnerOptions {
 /**
  * P2: SandboxedToolRunner provides execution boundaries for tool execution.
  * 
- * "Sandboxing" in this context means:
- * - Only registered tools can execute (no arbitrary code execution)
- * - Timeout protection to prevent hanging tools
- * - Input/output validation to prevent unsafe data
+ * SECURITY LIMITATION: Tools execute in-process. A CPU-bound or blocking handler can freeze
+ * the event loop and bypass timeouts, allowing DoS from a single tool. This is application-level
+ * sandboxing, not process-level isolation.
  * 
- * NOTE: This is NOT process-level isolation. Tools still run in the same Node.js process
- * and can access the runtime, filesystem, and network. For true isolation, consider:
- * - Worker threads for CPU-bound tasks
- * - Child processes for complete isolation
- * - Container-based execution (Docker, etc.)
+ * For true isolation with hard kill-on-timeout, consider:
+ * - Child processes with process.kill() on timeout
+ * - Worker threads (limited - functions can't be serialized)
+ * - Container-based execution (Docker, Deno Sandbox, Vercel Sandbox)
  * 
- * The current implementation provides application-level sandboxing through:
+ * Current implementation provides:
  * - Explicit tool registration (only registered tools can run)
- * - Timeout enforcement
+ * - Timeout enforcement (but can't kill CPU-bound tasks)
  * - Input/output safety validation
  */
 export class SandboxedToolRunner {
@@ -42,7 +40,10 @@ export class SandboxedToolRunner {
 
   /**
    * P2: Runs a tool with timeout protection and input/output validation.
-   * Provides application-level sandboxing (not process-level isolation).
+   * 
+   * WARNING: This does NOT provide process-level isolation. CPU-bound or blocking handlers
+   * can freeze the event loop and bypass timeouts. For true isolation, use child processes
+   * with hard kill-on-timeout semantics.
    */
   async run(toolName: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
     const handler = this.tools[toolName];
@@ -53,8 +54,9 @@ export class SandboxedToolRunner {
     // P2: Validate input to prevent prototype pollution and unsafe data
     assertSafeObject(input);
 
-    // Wrap tool execution in a timeout promise
-    // Store timeout ID so we can clear it if the tool completes before timeout
+    // P2: Timeout protection - but note: this won't kill CPU-bound tasks
+    // Promise.race only rejects the promise, it doesn't stop execution
+    // A CPU-bound handler will continue running and freeze the event loop
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
@@ -64,6 +66,7 @@ export class SandboxedToolRunner {
 
     try {
       // Race between tool execution and timeout
+      // LIMITATION: If handler is CPU-bound, it will continue executing even after timeout
       const result = await Promise.race([
         handler(input),
         timeoutPromise

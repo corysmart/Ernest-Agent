@@ -59,6 +59,46 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   }
   const llmAdapter = await buildLlmAdapter(options);
   const embeddingProvider = await buildEmbeddingProvider(llmAdapter, options);
+  
+  // P2: Reindex embeddings on startup if using Postgres with in-memory vector store
+  // This rebuilds embeddings from persisted memories to prevent desync after restart
+  if (process.env.DATABASE_URL && memoryRepository instanceof PostgresMemoryRepository) {
+    console.log('[INFO] Reindexing embeddings from persisted memories...');
+    try {
+      // Fetch all memories from Postgres
+      const allMemories = await memoryRepository.listByType(undefined, 10000); // Large limit to get all
+      
+      if (allMemories.length > 0) {
+        // Rebuild embeddings for all persisted memories
+        const vectorRecords = await Promise.all(
+          allMemories.map(async (memory) => {
+            const embedding = await embeddingProvider.embed(memory.content);
+            const scopeMatch = memory.id.match(/^([^:]+):(.+)$/);
+            const scope = scopeMatch ? scopeMatch[1] : undefined;
+            
+            return {
+              id: memory.id,
+              vector: embedding,
+              metadata: {
+                type: memory.type,
+                goalId: memory.metadata?.goalId ?? '',
+                ...(scope ? { scope } : {})
+              }
+            };
+          })
+        );
+        
+        await vectorStore.upsert(vectorRecords);
+        console.log(`[INFO] Reindexed ${vectorRecords.length} embeddings from persisted memories`);
+      } else {
+        console.log('[INFO] No persisted memories to reindex');
+      }
+    } catch (error) {
+      console.error('[ERROR] Failed to reindex embeddings:', error);
+      // Continue startup even if reindexing fails - vector store will be empty but won't crash
+    }
+  }
+  
   const memoryManager = new MemoryManager({
     repository: memoryRepository,
     vectorStore,

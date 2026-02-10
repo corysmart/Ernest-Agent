@@ -70,29 +70,37 @@ export class MemoryManager implements IMemoryManager {
 
     const embedding = await this.embeddingProvider.embed(query.text);
     
-    // P3: Filter by type before top-K search to prevent dilution
-    // If type filtering is needed, we need to either:
-    // 1. Filter at vector store level (if supported), or
-    // 2. Oversample to account for filtered-out results
+    // P3: Push type filters into vector metadata queries when supported
+    // This prevents dilution by filtering at the vector store level
     const requestedLimit = query.limit ?? 5;
     const hasTypeFilter = query.types && query.types.length > 0;
     
-    // Use scope filter if provided to ensure tenant-local recall
-    const filter = query.scope ? { scope: query.scope } : undefined;
+    // Build filter combining scope and type filters
+    const filter: Record<string, string> = {};
+    if (query.scope) {
+      filter.scope = query.scope;
+    }
+    // P3: Add type filter to metadata query when a single type is requested
+    // For multiple types, we still need post-filtering, but single type can be pushed down
+    if (hasTypeFilter && query.types!.length === 1) {
+      filter.type = query.types![0]!;
+    }
     
-    // P3: Oversample when type filtering is needed to ensure we get enough results after filtering
-    // Estimate that ~1/3 of results might be filtered out, so query 3x more
-    const queryLimit = hasTypeFilter ? requestedLimit * 3 : requestedLimit;
+    // P3: Oversample when multiple types are requested (can't push multi-type filter down)
+    // Single type filters are pushed into vector store query, so no oversampling needed
+    const needsOversampling = hasTypeFilter && query.types!.length > 1;
+    const queryLimit = needsOversampling ? requestedLimit * 3 : requestedLimit;
     
     const candidates = await this.vectorStore.query(embedding, { 
       topK: queryLimit,
-      filter
+      filter: Object.keys(filter).length > 0 ? filter : undefined
     });
     const memories = await this.repository.getByIds(candidates.map((candidate) => candidate.id));
 
     const now = Date.now();
-    // P3: Filter by type after retrieval (oversampling ensures we have enough results)
-    const filtered = query.types && query.types.length
+    // P3: Filter by type after retrieval only if multiple types were requested
+    // Single type filtering is already done at vector store level
+    const filtered = (hasTypeFilter && query.types!.length > 1)
       ? memories.filter((memory) => query.types?.includes(memory.type))
       : memories;
 
