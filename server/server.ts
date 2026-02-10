@@ -179,7 +179,7 @@ export async function buildServer(options?: { logger?: boolean }) {
       events: observation.events
     }, toolRunner, {
       auditLogger,
-      tenantId: undefined, // tenantId is undefined until auth is implemented
+      tenantId, // P3: Propagate authenticated tenantId to audit logging
       requestId
     });
 
@@ -199,7 +199,7 @@ export async function buildServer(options?: { logger?: boolean }) {
       outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),
       permissionGate: container.resolve<ToolPermissionGate>('permissionGate'),
       auditLogger,
-      tenantId: undefined, // tenantId is undefined until auth is implemented
+      tenantId, // P3: Propagate authenticated tenantId to audit logging
       requestId
     });
 

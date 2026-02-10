@@ -19,12 +19,30 @@ export function isSafeUrlBasic(url: string, options: SSRFOptions = {}): boolean 
     return false;
   }
 
+  // P2: Enforce HTTPS for hosted providers (unless allowlisted)
+  // HTTP should only be allowed for explicitly local/allowlisted URLs to prevent API key leakage
+  const isAllowlisted = options.allowlist && options.allowlist.length > 0 && options.allowlist.includes(parsed.hostname);
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname.startsWith('127.');
+  
+  // If allowlist is provided, only allowlisted URLs are permitted
   if (options.allowlist && options.allowlist.length > 0) {
-    return options.allowlist.includes(parsed.hostname);
-  }
-
-  if (parsed.hostname === 'localhost') {
-    return false;
+    if (!isAllowlisted) {
+      return false; // Reject non-allowlisted URLs when allowlist is provided
+    }
+    // Allowlisted URLs can use HTTP or HTTPS
+    // Continue to check for private IPs below (but skip localhost check for allowlisted)
+  } else {
+    // No allowlist: enforce HTTPS for non-localhost URLs
+    if (parsed.protocol === 'http:') {
+      if (!isLocalhost) {
+        return false; // Reject HTTP for non-localhost URLs when no allowlist
+      }
+    }
+    
+    // Reject localhost when no allowlist (security: prevent accidental local access)
+    if (parsed.hostname === 'localhost') {
+      return false;
+    }
   }
 
   // P2: Handle IPv6 addresses - Node.js URL parser may expand IPv4-mapped IPv6

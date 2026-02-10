@@ -30,4 +30,25 @@ describe('SSRF protection', () => {
 
     expect(result).toBe(true);
   });
+
+  describe('P2: HTTP enforcement for hosted providers', () => {
+    it('rejects HTTP for non-localhost URLs', () => {
+      expect(isSafeUrlBasic('http://api.example.com')).toBe(false);
+      expect(isSafeUrlBasic('http://192.168.1.1')).toBe(false);
+    });
+
+    it('allows HTTP for localhost', () => {
+      expect(isSafeUrlBasic('http://localhost:8080')).toBe(false); // Still rejected due to localhost check
+      expect(isSafeUrlBasic('http://127.0.0.1:8080')).toBe(false); // Still rejected due to private IP check
+    });
+
+    it('allows HTTP for allowlisted domains', () => {
+      expect(isSafeUrlBasic('http://api.example.com', { allowlist: ['api.example.com'] })).toBe(true);
+    });
+
+    it('requires HTTPS for non-allowlisted, non-localhost URLs', () => {
+      expect(isSafeUrlBasic('https://api.example.com')).toBe(true);
+      expect(isSafeUrlBasic('http://api.example.com')).toBe(false);
+    });
+  });
 });

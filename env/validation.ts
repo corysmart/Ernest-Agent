@@ -1,5 +1,11 @@
 const UNSAFE_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
+/**
+ * Maximum depth for recursive payload validation to prevent DoS via deep nesting.
+ * Default: 50 levels (matches assertSafeObject)
+ */
+const MAX_DEPTH = 50;
+
 export function assertSafePayload(payload?: Record<string, unknown>): void {
   if (!payload) {
     return;
@@ -9,12 +15,20 @@ export function assertSafePayload(payload?: Record<string, unknown>): void {
     throw new Error('Payload must be an object');
   }
 
-  if (containsUnsafeKeys(payload)) {
+  if (containsUnsafeKeys(payload, 0)) {
     throw new Error('Unsafe payload');
   }
 }
 
-function containsUnsafeKeys(value: unknown): boolean {
+/**
+ * P3: Recursively checks for unsafe keys with depth limit to prevent DoS attacks.
+ * Uses depth tracking to prevent stack overflow from deeply nested payloads.
+ */
+function containsUnsafeKeys(value: unknown, currentDepth: number): boolean {
+  if (currentDepth >= MAX_DEPTH) {
+    throw new Error(`Payload depth exceeds maximum allowed depth of ${MAX_DEPTH}`);
+  }
+
   if (!value || typeof value !== 'object') {
     return false;
   }
@@ -35,7 +49,7 @@ function containsUnsafeKeys(value: unknown): boolean {
     }
 
     const nested = (value as Record<string, unknown>)[key];
-    if (containsUnsafeKeys(nested)) {
+    if (containsUnsafeKeys(nested, currentDepth + 1)) {
       return true;
     }
   }

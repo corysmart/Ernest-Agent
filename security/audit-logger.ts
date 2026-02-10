@@ -117,6 +117,12 @@ function redactObject(obj: unknown, options: RedactionOptions = {}, visited: Wea
     return obj;
   }
 
+  // P2: Check for circular references before processing
+  if (visited.has(obj)) {
+    return '[CIRCULAR]';
+  }
+  visited.add(obj);
+
   if (Array.isArray(obj)) {
     return obj.map((item) => redactObject(item, options, visited));
   }

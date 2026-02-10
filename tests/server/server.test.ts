@@ -233,5 +233,44 @@ describe('Server', () => {
 
       await server.close();
     });
+
+    it('P3: propagates authenticated tenantId to audit logs', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+      process.env.API_KEY = 'test-key-tenant-123';
+
+      const server = await buildServer({ logger: false });
+
+      const logEntries: Array<{ tenantId?: string }> = [];
+      const originalLog = console.log;
+      console.log = jest.fn((message: string) => {
+        if (message.startsWith('[AUDIT]')) {
+          const logData = JSON.parse(message.replace('[AUDIT] ', ''));
+          if (logData.tenantId) {
+            logEntries.push({ tenantId: logData.tenantId });
+          }
+        }
+      });
+
+      await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        headers: {
+          authorization: 'ApiKey test-key-tenant-123'
+        },
+        payload: {
+          observation: { timestamp: 1, state: { status: 'ok' } },
+          goal: { id: 'g1', title: 'Test', priority: 1, horizon: 'short' }
+        }
+      });
+
+      console.log = originalLog;
+
+      // Should have logged entries with tenantId
+      const entriesWithTenantId = logEntries.filter((e) => e.tenantId);
+      expect(entriesWithTenantId.length).toBeGreaterThan(0);
+
+      await server.close();
+    });
   });
 });

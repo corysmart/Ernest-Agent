@@ -420,6 +420,28 @@ describe('Audit Logger', () => {
       expect(reasoning).not.toContain('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
     });
 
+    it('P2: handles circular references in objects', () => {
+      const circularObj: Record<string, unknown> = {
+        name: 'test',
+        data: { value: 'secret' }
+      };
+      circularObj.self = circularObj; // Create circular reference
+
+      logger.logToolCall({
+        tenantId: 'tenant-123',
+        requestId: 'req-456',
+        toolName: 'circular_test',
+        input: circularObj,
+        success: true
+      });
+
+      const logCall = consoleLogSpy.mock.calls[0]![0] as string;
+      const logData = JSON.parse(logCall.replace('[AUDIT] ', ''));
+      // Should handle circular reference without stack overflow
+      expect(logData.data.input.name).toBe('test');
+      expect(logData.data.input.self).toBe('[CIRCULAR]');
+    });
+
     it('P2: redacts long alphanumeric strings that look like tokens from reasoning', () => {
       logger.logAgentDecision({
         tenantId: 'tenant-123',
