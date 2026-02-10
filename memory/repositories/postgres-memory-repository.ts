@@ -87,15 +87,15 @@ export class PostgresMemoryRepository implements MemoryRepository {
     );
   }
 
-  async listByType(types?: MemoryType[], limit: number = 50): Promise<MemoryItem[]> {
+  async listByType(types?: MemoryType[], limit: number = 50, offset: number = 0): Promise<MemoryItem[]> {
     const query = types && types.length
       ? {
-        text: `SELECT * FROM memories WHERE type = ANY($1) ORDER BY created_at DESC LIMIT $2`,
-        values: [types, limit]
+        text: `SELECT * FROM memories WHERE type = ANY($1) ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        values: [types, limit, offset]
       }
       : {
-        text: `SELECT * FROM memories ORDER BY created_at DESC LIMIT $1`,
-        values: [limit]
+        text: `SELECT * FROM memories ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+        values: [limit, offset]
       };
 
     const result = await this.pool.query(query.text, query.values);

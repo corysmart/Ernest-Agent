@@ -289,6 +289,11 @@ export class StructuredAuditLogger implements AuditLogger {
     success: boolean;
     error?: string;
   }): Promise<void> {
+    // P2: Redact error strings to prevent sensitive data from leaking into audit logs
+    // Error messages can contain request URLs, tokens, headers, or other sensitive information
+    const redactionOpts = this.redactionOptions;
+    const redactedError = params.error ? redactString(params.error, redactionOpts) : undefined;
+    
     const result = this.logger.log({
       timestamp: Date.now(),
       tenantId: params.tenantId,
@@ -299,7 +304,7 @@ export class StructuredAuditLogger implements AuditLogger {
         model: params.model,
         tokensUsed: params.tokensUsed,
         success: params.success,
-        error: params.error
+        error: redactedError
       }
     });
     // P2: Await async audit loggers to ensure logs are persisted

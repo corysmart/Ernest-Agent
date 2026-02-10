@@ -62,16 +62,28 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   
   // P2: Reindex embeddings on startup if using Postgres with in-memory vector store
   // This rebuilds embeddings from persisted memories to prevent desync after restart
+  // P3: Use pagination to handle databases with >10k memories
   if (process.env.DATABASE_URL && memoryRepository instanceof PostgresMemoryRepository) {
     console.log('[INFO] Reindexing embeddings from persisted memories...');
     try {
-      // Fetch all memories from Postgres
-      const allMemories = await memoryRepository.listByType(undefined, 10000); // Large limit to get all
+      // P3: Paginate through all memories to handle databases with >10k memories
+      const pageSize = 1000;
+      let offset = 0;
+      let totalReindexed = 0;
+      let hasMore = true;
       
-      if (allMemories.length > 0) {
-        // Rebuild embeddings for all persisted memories
+      while (hasMore) {
+        // P3: Fetch memories in batches with pagination to handle >10k memories
+        const memories = await memoryRepository.listByType(undefined, pageSize, offset);
+        
+        if (memories.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        // Rebuild embeddings for this batch
         const vectorRecords = await Promise.all(
-          allMemories.map(async (memory) => {
+          memories.map(async (memory) => {
             const embedding = await embeddingProvider.embed(memory.content);
             const scopeMatch = memory.id.match(/^([^:]+):(.+)$/);
             const scope = scopeMatch ? scopeMatch[1] : undefined;
@@ -89,7 +101,18 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
         );
         
         await vectorStore.upsert(vectorRecords);
-        console.log(`[INFO] Reindexed ${vectorRecords.length} embeddings from persisted memories`);
+        totalReindexed += vectorRecords.length;
+        
+        // If we got fewer than pageSize, we've reached the end
+        if (memories.length < pageSize) {
+          hasMore = false;
+        } else {
+          offset += pageSize;
+        }
+      }
+      
+      if (totalReindexed > 0) {
+        console.log(`[INFO] Reindexed ${totalReindexed} embeddings from persisted memories`);
       } else {
         console.log('[INFO] No persisted memories to reindex');
       }
@@ -107,11 +130,16 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   });
   const promptFilter = new PromptInjectionFilter();
   const outputValidator = new ZodOutputValidator(decisionSchema);
+  // P2: Enable worker thread isolation via env flag for true process-level isolation
+  // When TOOL_USE_WORKERS=true, tools execute in worker threads with hard kill-on-timeout
+  // This prevents CPU-bound tools from freezing the event loop
+  const useWorkerThreads = process.env.TOOL_USE_WORKERS === 'true';
   const toolRunner = new SandboxedToolRunner({
     tools: {
       pursue_goal: async (input) => ({ acknowledged: true, input })
     },
-    timeoutMs: Number(process.env.TOOL_TIMEOUT_MS ?? 30000) // 30 seconds default
+    timeoutMs: Number(process.env.TOOL_TIMEOUT_MS ?? 30000), // 30 seconds default
+    useWorkerThreads // P2: Wire worker thread isolation from env
   });
   const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
 
