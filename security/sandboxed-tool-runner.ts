@@ -2,6 +2,7 @@ import { assertSafeObject } from './validation';
 import { Worker } from 'worker_threads';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
+import { existsSync } from 'fs';
 import { toolRegistry } from '../tools/registry';
 
 export interface ToolHandler {
@@ -87,14 +88,26 @@ export class SandboxedToolRunner {
    * in the worker via static imports. For in-process execution, tools are retrieved from the registry.
    */
   async run(toolName: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
-    // P2: Get handler from registry (module-based, no eval)
+    // P2: Validate input to prevent prototype pollution and unsafe data
+    assertSafeObject(input);
+
+    // P2: When worker threads are enabled, tools must be in registry (not constructor tools)
+    // Reject earlier with a clearer error to avoid confusing mismatch
+    if (this.useWorkerThreads) {
+      if (!toolRegistry.has(toolName)) {
+        throw new Error(
+          `Tool ${toolName} is not registered in the tool registry. ` +
+          `When useWorkerThreads=true, all tools must be registered via initializeToolRegistry() ` +
+          `at startup. Constructor-provided tools are not supported in worker threads for security.`
+        );
+      }
+    }
+
+    // P2: Get handler from registry (module-based, no eval) or constructor (for in-process only)
     const handler = toolRegistry.get(toolName) ?? this.tools[toolName];
     if (!handler) {
       throw new Error(`Tool ${toolName} not permitted or not found in registry`);
     }
-
-    // P2: Validate input to prevent prototype pollution and unsafe data
-    assertSafeObject(input);
 
     // P2: Use worker thread isolation if enabled
     if (this.useWorkerThreads) {
@@ -161,7 +174,8 @@ export class SandboxedToolRunner {
   ): Promise<Record<string, unknown>> {
     const requestId = randomUUID();
     
-    // P2: Verify tool exists in registry before spawning worker
+    // P2: Tool existence is already verified in run() before calling this method
+    // This check is redundant but kept for safety
     if (!toolRegistry.has(toolName)) {
       throw new Error(`Tool ${toolName} is not registered in the tool registry. ` +
         `All tools must be registered at startup via initializeToolRegistry().`);
@@ -169,7 +183,24 @@ export class SandboxedToolRunner {
     
     // P2: Use module-based worker script - no eval, no handler serialization
     // Worker script imports the tool registry and calls tools by name
-    const workerScriptPath = join(__dirname, 'tool-worker.js');
+    // P3: Handle both compiled (.js) and dev/test (.ts) environments
+    // In dev/test with ts-jest/ts-node, the file might be .ts
+    const workerScriptPathJs = join(__dirname, 'tool-worker.js');
+    const workerScriptPathTs = join(__dirname, 'tool-worker.ts');
+    
+    // Try .js first (production/compiled), then .ts (dev/test)
+    // If neither exists, throw a clear error
+    let workerScriptPath: string;
+    if (existsSync(workerScriptPathJs)) {
+      workerScriptPath = workerScriptPathJs;
+    } else if (existsSync(workerScriptPathTs)) {
+      workerScriptPath = workerScriptPathTs;
+    } else {
+      throw new Error(
+        `Worker script not found. Expected ${workerScriptPathJs} or ${workerScriptPathTs}. ` +
+        `If running in dev/test, ensure the file exists. If running in production, run 'npm run build' first.`
+      );
+    }
     
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const worker = new Worker(workerScriptPath);

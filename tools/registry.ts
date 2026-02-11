@@ -23,6 +23,7 @@ export interface ToolDefinition {
 
 class ToolRegistry {
   private readonly tools = new Map<string, ToolHandler>();
+  private locked = false; // P3: Lock registry after initialization to prevent runtime mutations
 
   /**
    * Register a tool in the registry.
@@ -31,13 +32,44 @@ class ToolRegistry {
    * P1: Idempotent registration - if tool is already registered, skip silently.
    * This allows initializeToolRegistry() to be called multiple times (e.g., in tests)
    * without throwing errors.
+   * 
+   * P3: After initialization is complete, the registry is locked and no new tools can be registered.
+   * This enforces the "static imports only" policy and prevents runtime mutations.
+   * However, idempotent re-registration of existing tools is allowed even when locked.
    */
   register(tool: ToolDefinition): void {
+    // P1: Idempotent check - if already registered, skip silently (even if locked)
     if (this.tools.has(tool.name)) {
-      // P1: Already registered - skip silently (idempotent)
       return;
     }
+    
+    // P3: After initialization is complete, the registry is locked and no new tools can be registered.
+    // This enforces the "static imports only" policy and prevents runtime mutations.
+    if (this.locked) {
+      throw new Error(
+        `Tool registry is locked. Cannot register new tool ${tool.name} after initialization. ` +
+        `All tools must be registered via initializeToolRegistry() at startup. ` +
+        `This enforces the "static imports only" security policy.`
+      );
+    }
+    
     this.tools.set(tool.name, tool.handler);
+  }
+
+  /**
+   * P3: Lock the registry to prevent further registrations.
+   * After locking, only get(), has(), and list() operations are allowed.
+   * This enforces the "static imports only" security policy.
+   */
+  lock(): void {
+    this.locked = true;
+  }
+
+  /**
+   * P3: Check if the registry is locked.
+   */
+  isLocked(): boolean {
+    return this.locked;
   }
 
   /**
@@ -71,6 +103,7 @@ export const toolRegistry = new ToolRegistry();
  * This should be called at application startup.
  * 
  * P2: All tools must be statically imported - no dynamic loading.
+ * P3: After initialization, the registry is locked to prevent runtime mutations.
  */
 export function initializeToolRegistry(): void {
   // Register all tools from static imports
@@ -87,5 +120,9 @@ export function initializeToolRegistry(): void {
   //   handler: anotherToolHandler,
   //   description: 'Description of another tool'
   // });
+
+  // P3: Lock the registry after initialization to prevent runtime mutations
+  // This enforces the "static imports only" security policy
+  toolRegistry.lock();
 }
 
