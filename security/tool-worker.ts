@@ -11,7 +11,11 @@
  */
 
 import { parentPort } from 'worker_threads';
-import { toolRegistry } from '../tools/registry';
+import { toolRegistry, initializeToolRegistry } from '../tools/registry';
+
+// P1: Initialize tool registry in worker thread
+// Workers have their own module scope, so they need to initialize the registry themselves
+initializeToolRegistry();
 
 parentPort?.on('message', async (request: { toolName: string; input: Record<string, unknown>; requestId: string }) => {
   try {

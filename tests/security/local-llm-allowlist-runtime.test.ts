@@ -67,16 +67,14 @@ describe('LocalLLM Allowlist Runtime Validation', () => {
       json: async () => ({ content: 'hello', tokensUsed: 5 })
     });
 
-    // Create adapter without allowlist
-    const adapter = await LocalLLMAdapter.create({
-      baseUrl: 'https://api.example.com',
-      resolveDns: true // P3: Use true to test DNS validation at runtime
-    });
-
-    // Should fail because DNS validation fails (no allowlist to bypass)
+    // DNS validation happens during create() when resolveDns is true
+    // The error is thrown during create(), not generate()
     await expect(
-      adapter.generate({ messages: [{ role: 'user', content: 'hi' }] })
-    ).rejects.toThrow('Unsafe URL detected');
+      LocalLLMAdapter.create({
+        baseUrl: 'https://api.example.com',
+        resolveDns: true // P3: Use true to test DNS validation at runtime
+      })
+    ).rejects.toThrow('Unsafe local model URL');
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(ssrfProtection.isSafeUrl).toHaveBeenCalled();

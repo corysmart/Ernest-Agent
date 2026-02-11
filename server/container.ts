@@ -35,6 +35,10 @@ export interface BuildContainerOptions {
 }
 
 export async function buildContainer(options: BuildContainerOptions = {}): Promise<ContainerContext> {
+  // P1: Initialize tool registry at startup - all tools must be registered before use
+  // This ensures tools are available in both main process and worker threads
+  initializeToolRegistry();
+
   const container = new Container();
 
   // P2: Vector store persistence mismatch handling

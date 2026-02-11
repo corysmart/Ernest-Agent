@@ -27,10 +27,15 @@ class ToolRegistry {
   /**
    * Register a tool in the registry.
    * Tools must be registered at startup from static imports.
+   * 
+   * P1: Idempotent registration - if tool is already registered, skip silently.
+   * This allows initializeToolRegistry() to be called multiple times (e.g., in tests)
+   * without throwing errors.
    */
   register(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
-      throw new Error(`Tool ${tool.name} is already registered`);
+      // P1: Already registered - skip silently (idempotent)
+      return;
     }
     this.tools.set(tool.name, tool.handler);
   }
