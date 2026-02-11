@@ -240,7 +240,16 @@ export async function buildServer(options?: { logger?: boolean }) {
 
 if (require.main === module) {
   buildServer().then((fastify) => {
-    const port = Number(process.env.PORT ?? 3000);
+    // P3: Validate PORT to prevent NaN or invalid values
+    // If env var is non-numeric, Number() returns NaN, which can cause Fastify to bind to unexpected port
+    const portRaw = Number(process.env.PORT ?? 3000);
+    if (!Number.isFinite(portRaw) || portRaw <= 0 || portRaw > 65535) {
+      throw new Error(
+        `Invalid PORT: ${process.env.PORT}. ` +
+        `Must be a number between 1 and 65535. Got: ${portRaw}`
+      );
+    }
+    const port = portRaw;
     fastify.listen({ port, host: '0.0.0.0' });
   });
 }

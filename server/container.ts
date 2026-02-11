@@ -81,24 +81,67 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
           break;
         }
         
-        // Rebuild embeddings for this batch
-        const vectorRecords = await Promise.all(
-          memories.map(async (memory) => {
-            const embedding = await embeddingProvider.embed(memory.content);
-            const scopeMatch = memory.id.match(/^([^:]+):(.+)$/);
-            const scope = scopeMatch ? scopeMatch[1] : undefined;
-            
-            return {
-              id: memory.id,
-              vector: embedding,
-              metadata: {
-                type: memory.type,
-                goalId: memory.metadata?.goalId ?? '',
-                ...(scope ? { scope } : {})
+        // P2: Rebuild embeddings with concurrency limits to prevent overwhelming the embedding provider
+        // Use a simple semaphore to limit concurrent embedding requests (default: 10)
+        // This prevents rate limit errors and cost spikes from parallel bursts
+        const concurrencyLimit = Number(process.env.REINDEX_CONCURRENCY ?? 10);
+        const maxConcurrency = Number.isFinite(concurrencyLimit) && concurrencyLimit > 0 ? concurrencyLimit : 10;
+        
+        const vectorRecords: Array<{
+          id: string;
+          vector: number[];
+          metadata: Record<string, string>;
+        }> = [];
+        
+        // Process memories with concurrency limit
+        for (let i = 0; i < memories.length; i += maxConcurrency) {
+          const batch = memories.slice(i, i + maxConcurrency);
+          
+          // Process batch with retries and error handling
+          const batchResults = await Promise.allSettled(
+            batch.map(async (memory) => {
+              // P2: Retry embedding with exponential backoff on failure
+              let lastError: Error | undefined;
+              const maxRetries = 3;
+              
+              for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                  const embedding = await embeddingProvider.embed(memory.content);
+                  const scopeMatch = memory.id.match(/^([^:]+):(.+)$/);
+                  const scope = scopeMatch ? scopeMatch[1] : undefined;
+                  
+                  return {
+                    id: memory.id,
+                    vector: embedding,
+                    metadata: {
+                      type: memory.type,
+                      goalId: memory.metadata?.goalId ?? '',
+                      ...(scope ? { scope } : {})
+                    }
+                  };
+                } catch (error) {
+                  lastError = error instanceof Error ? error : new Error(String(error));
+                  // Exponential backoff: 100ms, 200ms, 400ms
+                  if (attempt < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+                  }
+                }
               }
-            };
-          })
-        );
+              
+              // If all retries failed, throw the last error
+              throw lastError || new Error('Embedding failed after retries');
+            })
+          );
+          
+          // Collect successful results, log failures but continue
+          for (const result of batchResults) {
+            if (result.status === 'fulfilled') {
+              vectorRecords.push(result.value);
+            } else {
+              console.warn(`[WARNING] Failed to reindex memory embedding: ${result.reason?.message || 'Unknown error'}`);
+            }
+          }
+        }
         
         await vectorStore.upsert(vectorRecords);
         totalReindexed += vectorRecords.length;
