@@ -85,6 +85,7 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
         // Use a simple semaphore to limit concurrent embedding requests (default: 10)
         // This prevents rate limit errors and cost spikes from parallel bursts
         // P3: Validate REINDEX_CONCURRENCY and fail fast in production to avoid surprising behavior
+        // P2: Ensure concurrency is at least 1 to prevent infinite loop (fractional values like 0.5 floor to 0)
         const concurrencyLimitRaw = Number(process.env.REINDEX_CONCURRENCY ?? 10);
         if (!Number.isFinite(concurrencyLimitRaw) || concurrencyLimitRaw <= 0) {
           const errorMsg = `Invalid REINDEX_CONCURRENCY: ${process.env.REINDEX_CONCURRENCY}. Must be a positive number. Got: ${concurrencyLimitRaw}`;
@@ -93,9 +94,11 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
           }
           console.warn(`[WARNING] ${errorMsg}. Using default: 10`);
         }
-        const maxConcurrency = Number.isFinite(concurrencyLimitRaw) && concurrencyLimitRaw > 0 
+        // P2: Floor and clamp to at least 1 to prevent infinite loop in for (i += maxConcurrency)
+        const floored = Number.isFinite(concurrencyLimitRaw) && concurrencyLimitRaw > 0 
           ? Math.floor(concurrencyLimitRaw) 
           : 10;
+        const maxConcurrency = floored >= 1 ? floored : 1; // Ensure at least 1 to prevent infinite loop
         
         const vectorRecords: Array<{
           id: string;

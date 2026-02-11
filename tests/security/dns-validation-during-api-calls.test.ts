@@ -30,13 +30,13 @@ describe('DNS Validation During API Calls', () => {
       model: 'gpt-test',
       embeddingModel: 'text-embed',
       baseUrl: uniqueUrl,
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
 
-    // DNS validation should be called before fetch
-    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl);
+    // DNS validation should be called before fetch when resolveDns is true
+    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl, { resolveDns: true });
     expect(fetchMock).toHaveBeenCalled();
     
     isSafeUrlSpy.mockRestore();
@@ -56,13 +56,13 @@ describe('DNS Validation During API Calls', () => {
       model: 'gpt-test',
       embeddingModel: 'text-embed',
       baseUrl: uniqueUrl,
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     await adapter.embed('test text');
 
-    // DNS validation should be called before fetch
-    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl);
+    // DNS validation should be called before fetch when resolveDns is true
+    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl, { resolveDns: true });
     expect(fetchMock).toHaveBeenCalled();
     
     isSafeUrlSpy.mockRestore();
@@ -76,7 +76,7 @@ describe('DNS Validation During API Calls', () => {
       model: 'gpt-test',
       embeddingModel: 'text-embed',
       baseUrl: 'https://evil.example.com',
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     await expect(
@@ -98,12 +98,12 @@ describe('DNS Validation During API Calls', () => {
       apiKey: 'key',
       model: 'claude-test',
       baseUrl: 'https://api.anthropic.com/v1',
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
 
-    expect(isSafeUrlSpy).toHaveBeenCalledWith('https://api.anthropic.com/v1');
+    expect(isSafeUrlSpy).toHaveBeenCalledWith('https://api.anthropic.com/v1', { resolveDns: true });
     expect(fetchMock).toHaveBeenCalled();
     
     isSafeUrlSpy.mockRestore();
@@ -123,7 +123,7 @@ describe('DNS Validation During API Calls', () => {
       apiKey: 'key',
       model: 'claude-test',
       baseUrl: uniqueBaseUrl,
-      resolveDns: false,
+      resolveDns: true, // P3: Use true to test DNS validation at runtime
       embedding: {
         apiKey: 'key',
         baseUrl: uniqueEmbedUrl,
@@ -133,8 +133,8 @@ describe('DNS Validation During API Calls', () => {
 
     await adapter.embed('test text');
 
-    // Should validate embedding base URL
-    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueEmbedUrl);
+    // Should validate embedding base URL when resolveDns is true
+    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueEmbedUrl, { resolveDns: true });
     expect(fetchMock).toHaveBeenCalled();
     
     isSafeUrlSpy.mockRestore();
@@ -149,12 +149,12 @@ describe('DNS Validation During API Calls', () => {
 
     const adapter = await LocalLLMAdapter.create({
       baseUrl: 'https://llm.local',
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
 
-    expect(isSafeUrlSpy).toHaveBeenCalledWith('https://llm.local');
+    expect(isSafeUrlSpy).toHaveBeenCalledWith('https://llm.local', { resolveDns: true });
     expect(fetchMock).toHaveBeenCalled();
     
     isSafeUrlSpy.mockRestore();
@@ -173,17 +173,18 @@ describe('DNS Validation During API Calls', () => {
       model: 'gpt-test',
       embeddingModel: 'text-embed',
       baseUrl: uniqueUrl,
-      resolveDns: false
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
-    // First call
+    // First call - should validate DNS
     await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
-    // Second call - should use cached validation
+    // Second call - should use cached validation (cache is checked before calling isSafeUrl)
     await adapter.generate({ messages: [{ role: 'user', content: 'hi2' }] });
 
     // DNS validation should only be called once (cached on second call)
+    // Note: isSafeUrl is only called when cache is expired or missing
     expect(isSafeUrlSpy).toHaveBeenCalledTimes(1);
-    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl);
+    expect(isSafeUrlSpy).toHaveBeenCalledWith(uniqueUrl, { resolveDns: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     
     isSafeUrlSpy.mockRestore();

@@ -30,6 +30,7 @@ export class LocalLLMAdapter implements LLMAdapter {
   private readonly timeoutMs: number;
   private readonly costPerToken: number;
   private readonly allowlist?: string[];
+  private readonly resolveDns: boolean; // P3: Store resolveDns flag for runtime checks
 
   /**
    * Private constructor. Use LocalLLMAdapter.create() instead to ensure DNS rebinding protection.
@@ -45,6 +46,7 @@ export class LocalLLMAdapter implements LLMAdapter {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
     this.allowlist = options.allowlist;
+    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');
@@ -81,14 +83,15 @@ export class LocalLLMAdapter implements LLMAdapter {
     const requestUrl = `${trimSlash(this.baseUrl)}${this.generatePath}`;
     
     // If allowlist is configured, skip DNS validation (allowlist bypasses DNS check)
-    if (!this.allowlist || this.allowlist.length === 0) {
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if ((!this.allowlist || this.allowlist.length === 0) && this.resolveDns) {
       const cacheKey = `${this.baseUrl}:no-allowlist`;
       const now = Date.now();
       const cached = dnsValidationCache.get(cacheKey);
       
       // Revalidate if cache expired or URL not cached
       if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-        const isSafe = await isSafeUrl(this.baseUrl);
+        const isSafe = await isSafeUrl(this.baseUrl, { resolveDns: true });
         if (!isSafe) {
           throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
         }
@@ -134,14 +137,15 @@ export class LocalLLMAdapter implements LLMAdapter {
     const requestUrl = `${trimSlash(this.baseUrl)}${this.embedPath}`;
     
     // If allowlist is configured, skip DNS validation (allowlist bypasses DNS check)
-    if (!this.allowlist || this.allowlist.length === 0) {
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if ((!this.allowlist || this.allowlist.length === 0) && this.resolveDns) {
       const cacheKey = `${this.baseUrl}:no-allowlist`;
       const now = Date.now();
       const cached = dnsValidationCache.get(cacheKey);
       
       // Revalidate if cache expired or URL not cached
       if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-        const isSafe = await isSafeUrl(this.baseUrl);
+        const isSafe = await isSafeUrl(this.baseUrl, { resolveDns: true });
         if (!isSafe) {
           throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
         }

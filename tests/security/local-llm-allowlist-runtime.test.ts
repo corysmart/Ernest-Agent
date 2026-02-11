@@ -70,7 +70,7 @@ describe('LocalLLM Allowlist Runtime Validation', () => {
     // Create adapter without allowlist
     const adapter = await LocalLLMAdapter.create({
       baseUrl: 'https://api.example.com',
-      resolveDns: false // Skip DNS during create, but it will be checked during API calls
+      resolveDns: true // P3: Use true to test DNS validation at runtime
     });
 
     // Should fail because DNS validation fails (no allowlist to bypass)

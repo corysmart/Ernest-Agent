@@ -83,7 +83,10 @@ export class MemoryManager implements IMemoryManager {
       console.warn(`[WARNING] Query limit ${rawLimit} exceeds maximum ${MAX_QUERY_LIMIT}. Capping to ${MAX_QUERY_LIMIT}`);
       requestedLimit = MAX_QUERY_LIMIT;
     } else {
-      requestedLimit = Math.floor(rawLimit); // Ensure integer
+      // P3: Floor and clamp to at least 1 to prevent topK=0 which can cause empty or invalid queries
+      // Fractional values like 0.5 floor to 0, which is invalid for vector queries
+      const floored = Math.floor(rawLimit);
+      requestedLimit = floored >= 1 ? floored : 1; // Ensure at least 1
     }
     const hasTypeFilter = query.types && query.types.length > 0;
     

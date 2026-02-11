@@ -231,7 +231,10 @@ export class StructuredAuditLogger implements AuditLogger {
         stateTrace: params.stateTrace
       }
     });
+    // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
       await result;
     }
   }
@@ -275,7 +278,10 @@ export class StructuredAuditLogger implements AuditLogger {
       }
     });
     // P2: Await async audit loggers to ensure logs are persisted
+    // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
       await result;
     }
   }
@@ -308,7 +314,10 @@ export class StructuredAuditLogger implements AuditLogger {
       }
     });
     // P2: Await async audit loggers to ensure logs are persisted
+    // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
       await result;
     }
   }
@@ -344,7 +353,10 @@ export class StructuredAuditLogger implements AuditLogger {
         context: redactedContext
       }
     });
+    // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
       await result;
     }
   }

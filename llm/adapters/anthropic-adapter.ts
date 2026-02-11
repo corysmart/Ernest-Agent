@@ -38,6 +38,7 @@ export class AnthropicAdapter implements LLMAdapter {
   private readonly costPerToken: number;
   private readonly anthropicVersion: string;
   private readonly embedding?: AnthropicEmbeddingConfig;
+  private readonly resolveDns: boolean; // P3: Store resolveDns flag for runtime checks
 
   /**
    * Private constructor. Use AnthropicAdapter.create() instead to ensure DNS rebinding protection.
@@ -58,6 +59,7 @@ export class AnthropicAdapter implements LLMAdapter {
     this.costPerToken = options.costPerToken ?? 0;
     this.anthropicVersion = options.anthropicVersion ?? '2023-06-01';
     this.embedding = options.embedding;
+    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe Anthropic base URL');
@@ -124,12 +126,15 @@ export class AnthropicAdapter implements LLMAdapter {
     const cached = dnsValidationCache.get(this.baseUrl);
     
     // Revalidate if cache expired or URL not cached
-    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if (this.resolveDns) {
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.baseUrl, { resolveDns: true });
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
       }
-      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const response = await fetchWithTimeout(requestUrl, {
@@ -176,12 +181,15 @@ export class AnthropicAdapter implements LLMAdapter {
     const cached = dnsValidationCache.get(this.embedding.baseUrl);
     
     // Revalidate if cache expired or URL not cached
-    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-      const isSafe = await isSafeUrl(this.embedding.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.embedding.baseUrl} resolves to private IP`);
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if (this.resolveDns) {
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.embedding.baseUrl, { resolveDns: true });
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.embedding.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(this.embedding.baseUrl, { isValid: true, timestamp: now });
       }
-      dnsValidationCache.set(this.embedding.baseUrl, { isValid: true, timestamp: now });
     }
 
     const response = await fetchWithTimeout(requestUrl, {

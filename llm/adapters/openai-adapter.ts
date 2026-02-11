@@ -32,6 +32,7 @@ export class OpenAIAdapter implements LLMAdapter {
   private readonly timeoutMs: number;
   private readonly costPerToken: number;
   private readonly organization?: string;
+  private readonly resolveDns: boolean; // P3: Store resolveDns flag for runtime checks
 
   /**
    * Private constructor. Use OpenAIAdapter.create() instead to ensure DNS rebinding protection.
@@ -52,6 +53,7 @@ export class OpenAIAdapter implements LLMAdapter {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
     this.organization = options.organization;
+    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');
@@ -92,12 +94,15 @@ export class OpenAIAdapter implements LLMAdapter {
     const cached = dnsValidationCache.get(this.baseUrl);
     
     // Revalidate if cache expired or URL not cached
-    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if (this.resolveDns) {
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.baseUrl, { resolveDns: true });
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
       }
-      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const payload = {
@@ -142,12 +147,15 @@ export class OpenAIAdapter implements LLMAdapter {
     const cached = dnsValidationCache.get(this.baseUrl);
     
     // Revalidate if cache expired or URL not cached
-    if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
-      const isSafe = await isSafeUrl(this.baseUrl);
-      if (!isSafe) {
-        throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+    // P3: Honor resolveDns flag at runtime - if false, skip DNS resolution (for offline envs)
+    if (this.resolveDns) {
+      if (!cached || (now - cached.timestamp) > DNS_CACHE_TTL_MS) {
+        const isSafe = await isSafeUrl(this.baseUrl, { resolveDns: true });
+        if (!isSafe) {
+          throw new Error(`Unsafe URL detected: ${this.baseUrl} resolves to private IP`);
+        }
+        dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
       }
-      dnsValidationCache.set(this.baseUrl, { isValid: true, timestamp: now });
     }
 
     const payload = {
