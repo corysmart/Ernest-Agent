@@ -16,7 +16,18 @@ export class AgentRegistry {
   }
 
   get(id: string): AgentProfile | undefined {
-    return this.agents.get(id);
+    // P3: Return defensive copy to prevent external mutation of registry state
+    const agent = this.agents.get(id);
+    if (!agent) {
+      return undefined;
+    }
+    
+    return {
+      id: agent.id,
+      role: agent.role,
+      capabilities: agent.capabilities ? [...agent.capabilities] : [],
+      allowedMemoryScopes: [...agent.allowedMemoryScopes]
+    };
   }
 
   list(): AgentProfile[] {

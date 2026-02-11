@@ -44,15 +44,21 @@ export class CognitiveAgent {
       
       // P2: Act on prompt injection detection - block execution and log
       if (sanitized.flagged) {
-        await this.options.auditLogger?.logError({
-          tenantId: this.options.tenantId,
-          requestId: this.options.requestId,
-          error: 'Prompt injection detected',
-          context: {
-            reasons: sanitized.reasons,
-            flagged: true
-          }
-        });
+        // P2: Log error - best-effort, don't break agent flow
+        try {
+          await this.options.auditLogger?.logError({
+            tenantId: this.options.tenantId,
+            requestId: this.options.requestId,
+            error: 'Prompt injection detected',
+            context: {
+              reasons: sanitized.reasons,
+              flagged: true
+            }
+          });
+        } catch (logError) {
+          // P2: Audit logging failures should not break agent flow
+          console.error(`[ERROR] Failed to log prompt injection error: ${logError instanceof Error ? logError.message : String(logError)}`);
+        }
         
         // Block execution when prompt injection is detected - do not proceed with flagged input
         transition('error');
@@ -138,25 +144,36 @@ export class CognitiveAgent {
       try {
         response = await this.options.llmAdapter.generate(request);
         
-        // Log successful LLM request
-        await this.options.auditLogger?.logLLMRequest({
-          tenantId: this.options.tenantId,
-          requestId: this.options.requestId,
-          provider: llmProvider,
-          model: 'unknown', // Adapters don't expose model name easily
-          tokensUsed: response.tokensUsed,
-          success: true
-        });
+        // P2: Log successful LLM request - best-effort, don't break agent flow
+        try {
+          await this.options.auditLogger?.logLLMRequest({
+            tenantId: this.options.tenantId,
+            requestId: this.options.requestId,
+            provider: llmProvider,
+            model: 'unknown', // Adapters don't expose model name easily
+            tokensUsed: response.tokensUsed,
+            success: true
+          });
+        } catch (logError) {
+          // P2: Audit logging failures should not break agent flow
+          // Log error but continue execution
+          console.error(`[ERROR] Failed to log LLM request: ${logError instanceof Error ? logError.message : String(logError)}`);
+        }
       } catch (llmError) {
-        // Log LLM request failure
-        await this.options.auditLogger?.logLLMRequest({
-          tenantId: this.options.tenantId,
-          requestId: this.options.requestId,
-          provider: llmProvider,
-          model: 'unknown',
-          success: false,
-          error: llmError instanceof Error ? llmError.message : 'Unknown error'
-        });
+        // P2: Log LLM request failure - best-effort, don't break agent flow
+        try {
+          await this.options.auditLogger?.logLLMRequest({
+            tenantId: this.options.tenantId,
+            requestId: this.options.requestId,
+            provider: llmProvider,
+            model: 'unknown',
+            success: false,
+            error: llmError instanceof Error ? llmError.message : 'Unknown error'
+          });
+        } catch (logError) {
+          // P2: Audit logging failures should not break agent flow
+          console.error(`[ERROR] Failed to log LLM request error: ${logError instanceof Error ? logError.message : String(logError)}`);
+        }
         throw llmError;
       }
 
@@ -174,19 +191,25 @@ export class CognitiveAgent {
         return { status: 'error', error: 'Decision missing actionType', stateTrace };
       }
 
-      // Log agent decision
-      await this.options.auditLogger?.logAgentDecision({
-        tenantId: this.options.tenantId,
-        requestId: this.options.requestId,
-        decision: {
-          actionType: decision.actionType,
-          actionPayload: decision.actionPayload,
-          confidence: decision.confidence,
-          reasoning: decision.reasoning
-        },
-        goalId: goal.id,
-        stateTrace
-      });
+      // P2: Log agent decision - best-effort, don't break agent flow
+      try {
+        await this.options.auditLogger?.logAgentDecision({
+          tenantId: this.options.tenantId,
+          requestId: this.options.requestId,
+          decision: {
+            actionType: decision.actionType,
+            actionPayload: decision.actionPayload,
+            confidence: decision.confidence,
+            reasoning: decision.reasoning
+          },
+          goalId: goal.id,
+          stateTrace
+        });
+      } catch (logError) {
+        // P2: Audit logging failures should not break agent flow
+        // Log error but continue execution
+        console.error(`[ERROR] Failed to log agent decision: ${logError instanceof Error ? logError.message : String(logError)}`);
+      }
 
       const action = { type: decision.actionType, payload: decision.actionPayload };
       const permission = this.options.permissionGate.isAllowed(action, { goalId: goal.id });
@@ -224,12 +247,18 @@ export class CognitiveAgent {
       };
     } catch (error) {
       transition('error');
-      await this.options.auditLogger?.logError({
-        tenantId: this.options.tenantId,
-        requestId: this.options.requestId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        context: { stateTrace }
-      });
+      // P2: Log error - best-effort, don't break agent flow
+      try {
+        await this.options.auditLogger?.logError({
+          tenantId: this.options.tenantId,
+          requestId: this.options.requestId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          context: { stateTrace }
+        });
+      } catch (logError) {
+        // P2: Audit logging failures should not break agent flow
+        console.error(`[ERROR] Failed to log agent error: ${logError instanceof Error ? logError.message : String(logError)}`);
+      }
       return {
         status: 'error',
         error: error instanceof Error ? error.message : 'Unknown error',

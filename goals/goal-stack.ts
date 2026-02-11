@@ -39,7 +39,23 @@ export class GoalStack {
       return a.createdAt - b.createdAt;
     });
 
-    return candidates[0] ?? null;
+    // P3: Return defensive copy to prevent external mutation of internal goal state
+    const selectedGoal = candidates[0];
+    if (!selectedGoal) {
+      return null;
+    }
+    
+    return {
+      id: selectedGoal.id,
+      title: selectedGoal.title,
+      description: selectedGoal.description,
+      priority: selectedGoal.priority,
+      status: selectedGoal.status,
+      horizon: selectedGoal.horizon,
+      createdAt: selectedGoal.createdAt,
+      updatedAt: selectedGoal.updatedAt,
+      candidateActions: selectedGoal.candidateActions ? [...selectedGoal.candidateActions] : undefined
+    };
   }
 
   listGoals(): Goal[] {

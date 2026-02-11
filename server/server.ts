@@ -239,7 +239,7 @@ export async function buildServer(options?: { logger?: boolean }) {
 }
 
 if (require.main === module) {
-  buildServer().then((fastify) => {
+  buildServer().then(async (fastify) => {
     // P3: Validate PORT to prevent NaN or invalid values
     // If env var is non-numeric, Number() returns NaN, which can cause Fastify to bind to unexpected port
     const portRaw = Number(process.env.PORT ?? 3000);
@@ -250,6 +250,17 @@ if (require.main === module) {
       );
     }
     const port = portRaw;
-    fastify.listen({ port, host: '0.0.0.0' });
+    
+    // P3: Await and error-handle fastify.listen to prevent unhandled rejections
+    try {
+      await fastify.listen({ port, host: '0.0.0.0' });
+      console.log(`Server listening on port ${port}`);
+    } catch (error) {
+      console.error(`[ERROR] Failed to start server on port ${port}:`, error);
+      process.exit(1);
+    }
+  }).catch((error) => {
+    console.error('[ERROR] Failed to build server:', error);
+    process.exit(1);
   });
 }
