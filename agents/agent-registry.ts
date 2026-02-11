@@ -9,8 +9,14 @@ export class AgentRegistry {
       throw new Error('Agent already registered');
     }
 
+    // P3: Deep copy arrays to prevent external mutation of internal state
+    // If caller mutates allowedMemoryScopes or capabilities after registration,
+    // it would mutate internal state and potentially bypass expected invariants
+    // This matches the defensive copying behavior in get(), list(), and listByRole()
     this.agents.set(profile.id, {
       ...profile,
+      capabilities: profile.capabilities ? [...profile.capabilities] : [],
+      allowedMemoryScopes: [...profile.allowedMemoryScopes],
       createdAt: profile.createdAt ?? Date.now()
     });
   }

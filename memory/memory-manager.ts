@@ -136,9 +136,11 @@ export class MemoryManager implements IMemoryManager {
       await this.repository.updateAccess(result.memory.id, now);
     }
 
+    // P3: Use validated requestedLimit instead of query.limit to prevent bypass
+    // query.limit may be fractional or negative, but requestedLimit was validated and clamped
     return results
       .sort((a, b) => b.score - a.score)
-      .slice(0, query.limit ?? results.length);
+      .slice(0, requestedLimit);
   }
 
   async injectForPrompt(query: MemoryQuery): Promise<string> {

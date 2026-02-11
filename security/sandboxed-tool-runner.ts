@@ -1,6 +1,8 @@
 import { assertSafeObject } from './validation';
 import { Worker } from 'worker_threads';
 import { randomUUID } from 'crypto';
+import { join } from 'path';
+import { toolRegistry } from '../tools/registry';
 
 export interface ToolHandler {
   (input: Record<string, unknown>): Promise<Record<string, unknown>> | Record<string, unknown>;
@@ -75,10 +77,20 @@ export class SandboxedToolRunner {
    * When useWorkerThreads=true, provides true process-level isolation with hard kill-on-timeout.
    * When useWorkerThreads=false (default), uses in-process execution (CPU-bound tasks can freeze event loop).
    */
+  /**
+   * P2: Runs a tool with timeout protection and input/output validation.
+   * 
+   * When useWorkerThreads=true, provides true process-level isolation with hard kill-on-timeout.
+   * When useWorkerThreads=false (default), uses in-process execution (CPU-bound tasks can freeze event loop).
+   * 
+   * P2: Tools are loaded from the module-based registry. For worker threads, tools are loaded
+   * in the worker via static imports. For in-process execution, tools are retrieved from the registry.
+   */
   async run(toolName: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const handler = this.tools[toolName];
+    // P2: Get handler from registry (module-based, no eval)
+    const handler = toolRegistry.get(toolName) ?? this.tools[toolName];
     if (!handler) {
-      throw new Error('Tool not permitted');
+      throw new Error(`Tool ${toolName} not permitted or not found in registry`);
     }
 
     // P2: Validate input to prevent prototype pollution and unsafe data
@@ -139,9 +151,8 @@ export class SandboxedToolRunner {
    * P2: Executes tool in worker thread with hard kill-on-timeout.
    * Provides true isolation - CPU-bound handlers cannot freeze the main event loop.
    * 
-   * P3: LIMITATION: This uses handler.toString() which breaks for closures or handlers
-   * that depend on outer scope. For production, consider a tool registry system with
-   * module-based execution instead of source serialization.
+   * P2: Uses module-based tool registry - no eval or handler.toString() serialization.
+   * Tools are loaded from static imports in the worker thread.
    */
   private async runInWorkerThread(
     toolName: string,
@@ -150,86 +161,18 @@ export class SandboxedToolRunner {
   ): Promise<Record<string, unknown>> {
     const requestId = randomUUID();
     
-    // P3: Serialize handler to string for worker thread
-    // LIMITATION: handler.toString() breaks for closures or handlers with outer scope dependencies
-    // The serialized function loses access to closure variables and will fail at runtime
-    // For production, use a tool registry system that loads tools from modules instead
-    const handlerString = handler.toString();
-    
-    // P3: Detect if handler is non-serializable (closures, method shorthand, class methods, etc.)
-    // Method shorthand (e.g., foo(a){...}) and class methods are not valid standalone function declarations
-    // and will crash the worker when assigned to const handler = ...
-    const handlerCode = handlerString.trim();
-    const isNonSerializable = 
-      handlerCode.includes('[native code]') || // Native functions can't be serialized
-      handlerCode.startsWith('[') || // Array methods
-      handlerCode.startsWith('class ') || // Class methods
-      /^\w+\s*\(/.test(handlerCode) && !handlerCode.startsWith('function') && !handlerCode.startsWith('async') && !handlerCode.includes('=>'); // Method shorthand (e.g., "foo(a) {...}")
-    
-    if (isNonSerializable) {
-      const errorMessage = `Tool ${toolName} handler cannot be serialized for worker thread execution. ` +
-        `Handler appears to be a method shorthand, class method, or closure. ` +
-        `Consider refactoring to a standalone function or using a module-based tool registry.`;
-      
-      // P2: In production or when isolation is required, fail instead of silently downgrading
-      if (this.requireIsolation || process.env.NODE_ENV === 'production') {
-        throw new Error(
-          `P2: Worker thread isolation is required but handler serialization failed. ${errorMessage}`
-        );
-      }
-      
-      // P3: In non-production, fall back with warning
-      console.warn(`[WARNING] ${errorMessage} Falling back to in-process execution.`);
-      return this.runInProcess(toolName, handler, input);
+    // P2: Verify tool exists in registry before spawning worker
+    if (!toolRegistry.has(toolName)) {
+      throw new Error(`Tool ${toolName} is not registered in the tool registry. ` +
+        `All tools must be registered at startup via initializeToolRegistry().`);
     }
     
-    // P3: Escape handler string to prevent template literal injection
-    // If handler contains backticks or ${...}, it would corrupt the worker script
-    // We're inserting into a template literal, so we need to escape:
-    // - Backslashes first (so other escapes work)
-    // - Backticks (to prevent closing the template literal)
-    // - ${ (to prevent template literal interpolation)
-    const escapedHandlerString = handlerString
-      .replace(/\\/g, '\\\\')   // Escape backslashes first (\\ becomes \\\\)
-      .replace(/`/g, '\\`')     // Escape backticks (` becomes \`)
-      .replace(/\$\{/g, '\\${'); // Escape template literal expressions (${ becomes \${)
-    
-    // Create worker script
-    // P2: WARNING - This uses eval via handler.toString() and string interpolation
-    // If tool handlers come from dynamic plugins or untrusted sources, this is effectively RCE in a worker
-    // For production use with untrusted handlers, implement a module-based tool registry:
-    // - Static imports of tool handlers from known modules
-    // - IPC-based communication (no eval)
-    // - Tool registry that validates and loads tools at startup
-    // P3: Use escaped handler string to prevent template literal injection
-    const workerScript = `
-      const { parentPort } = require('worker_threads');
-      
-      // P2: Reconstruct handler from string - SECURITY RISK if handlers are untrusted
-      // This uses eval-like behavior and should only be used with trusted, statically-defined handlers
-      // For untrusted handlers, use a module-based tool registry with static imports + IPC
-      const handler = ${escapedHandlerString};
-      
-      parentPort.on('message', async (request) => {
-        try {
-          const result = await handler(request.input);
-          parentPort.postMessage({
-            requestId: request.requestId,
-            success: true,
-            result
-          });
-        } catch (error) {
-          parentPort.postMessage({
-            requestId: request.requestId,
-            success: false,
-            error: error.message || String(error)
-          });
-        }
-      });
-    `;
+    // P2: Use module-based worker script - no eval, no handler serialization
+    // Worker script imports the tool registry and calls tools by name
+    const workerScriptPath = join(__dirname, 'tool-worker.js');
     
     return new Promise<Record<string, unknown>>((resolve, reject) => {
-      const worker = new Worker(workerScript, { eval: true });
+      const worker = new Worker(workerScriptPath);
       let timeoutId: NodeJS.Timeout | undefined;
       let completed = false;
       
@@ -281,7 +224,8 @@ export class SandboxedToolRunner {
         }
       });
       
-      // Send execution request
+      // Send execution request with tool name and input
+      // Worker will look up tool in registry and execute it
       worker.postMessage({ toolName, input, requestId });
     });
   }

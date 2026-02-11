@@ -8,7 +8,15 @@ export class GoalStack {
     if (this.goals.has(goal.id)) {
       throw new Error('Goal with id already exists');
     }
-    this.goals.set(goal.id, { ...goal });
+    // P3: Deep copy goal including nested candidateActions to prevent external mutation
+    // This matches the defensive copying behavior in listGoals() and resolveNextGoal()
+    this.goals.set(goal.id, {
+      ...goal,
+      candidateActions: goal.candidateActions?.map((action) => ({
+        ...action,
+        payload: action.payload ? JSON.parse(JSON.stringify(action.payload)) : undefined
+      }))
+    });
   }
 
   updateStatus(goalId: string, status: GoalStatus): void {

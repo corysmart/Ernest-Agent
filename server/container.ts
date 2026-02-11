@@ -11,6 +11,7 @@ import { MemoryPoisoningGuard } from '../security/memory-poisoning-guard';
 import { decisionSchema } from '../security/decision-schema';
 import { RateLimiter } from '../security/rate-limiter';
 import { SandboxedToolRunner } from '../security/sandboxed-tool-runner';
+import { initializeToolRegistry } from '../tools/registry';
 import { MockLLMAdapter } from '../llm/mock-adapter';
 import { OpenAIAdapter } from '../llm/adapters/openai-adapter';
 import { AnthropicAdapter } from '../llm/adapters/anthropic-adapter';
@@ -217,10 +218,11 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   }
   const timeoutMs = timeoutMsRaw;
   
+  // P2: Tool registry is now initialized above - tools are loaded from modules
+  // SandboxedToolRunner will use the registry for worker thread execution
+  // For in-process execution, we still need to pass tools, but they come from the registry
   const toolRunner = new SandboxedToolRunner({
-    tools: {
-      pursue_goal: async (input) => ({ acknowledged: true, input })
-    },
+    tools: {}, // P2: Tools are now loaded from registry - this is kept for backward compatibility
     timeoutMs, // P3: Validated to be a finite positive number
     useWorkerThreads, // P2: Secure-by-default: enabled in production, opt-in elsewhere
     requireIsolation: process.env.NODE_ENV === 'production' // P2: Require isolation in production

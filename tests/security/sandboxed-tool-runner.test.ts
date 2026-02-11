@@ -18,7 +18,7 @@ describe('SandboxedToolRunner', () => {
   it('rejects unknown tools', async () => {
     const runner = new SandboxedToolRunner({ tools: {} });
 
-    await expect(runner.run('unknown', {})).rejects.toThrow('Tool not permitted');
+    await expect(runner.run('unknown', {})).rejects.toThrow('not permitted or not found in registry');
   });
 
   it('P3: handles handlers with template literals without breaking worker script', async () => {
