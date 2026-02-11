@@ -26,11 +26,22 @@ export class InMemoryMemoryRepository implements MemoryRepository {
   }
 
   async listByType(types?: MemoryType[], limit: number = 50, offset: number = 0): Promise<MemoryItem[]> {
-    const filtered = [...this.memories.values()].filter((memory) =>
+    // P3: Snapshot IDs first to ensure stable pagination even if new items are inserted during iteration
+    // Without this, insertion order changes can cause skipped/duplicated items in long-running processes
+    // This creates a stable snapshot of IDs at the start of the query
+    const allMemories = [...this.memories.values()];
+    const filtered = allMemories.filter((memory) =>
       types ? types.includes(memory.type) : true
     );
-
-    return filtered.slice(offset, offset + limit);
+    
+    // Snapshot IDs to ensure stable pagination
+    const snapshotIds = filtered.map((memory) => memory.id);
+    
+    // Fetch by IDs to ensure we get the exact items from the snapshot, even if the Map changes
+    const paginatedIds = snapshotIds.slice(offset, offset + limit);
+    return paginatedIds
+      .map((id) => this.memories.get(id))
+      .filter((memory): memory is MemoryItem => Boolean(memory));
   }
 
   async delete(id: string): Promise<void> {
