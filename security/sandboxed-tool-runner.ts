@@ -5,6 +5,53 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { toolRegistry } from '../tools/registry';
 
+/**
+ * P3: Validates that a value is structured-clone compatible (can be sent via postMessage).
+ * Rejects functions, symbols, and other non-serializable values that would cause DataCloneError.
+ */
+function assertStructuredCloneCompatible(value: unknown, path = 'root'): void {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  const type = typeof value;
+  
+  // Primitive types are always cloneable
+  if (type === 'boolean' || type === 'number' || type === 'string') {
+    return;
+  }
+
+  // Functions and symbols cannot be cloned
+  if (type === 'function') {
+    throw new Error(`Value at ${path} contains a function, which cannot be cloned for worker thread communication`);
+  }
+  
+  if (type === 'symbol') {
+    throw new Error(`Value at ${path} contains a symbol, which cannot be cloned for worker thread communication`);
+  }
+
+  // BigInt cannot be cloned
+  if (type === 'bigint') {
+    throw new Error(`Value at ${path} contains a BigInt, which cannot be cloned for worker thread communication`);
+  }
+
+  // Objects and arrays need recursive validation
+  if (type === 'object') {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        assertStructuredCloneCompatible(item, `${path}[${index}]`);
+      });
+    } else {
+      // Plain objects - check all properties
+      for (const key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          assertStructuredCloneCompatible((value as Record<string, unknown>)[key], `${path}.${key}`);
+        }
+      }
+    }
+  }
+}
+
 export interface ToolHandler {
   (input: Record<string, unknown>): Promise<Record<string, unknown>> | Record<string, unknown>;
 }
@@ -183,22 +230,16 @@ export class SandboxedToolRunner {
     
     // P2: Use module-based worker script - no eval, no handler serialization
     // Worker script imports the tool registry and calls tools by name
-    // P3: Handle both compiled (.js) and dev/test (.ts) environments
-    // In dev/test with ts-jest/ts-node, the file might be .ts
-    const workerScriptPathJs = join(__dirname, 'tool-worker.js');
-    const workerScriptPathTs = join(__dirname, 'tool-worker.ts');
+    // P3: Node.js Worker cannot execute .ts files directly - requires compiled .js
+    // Error clearly if .js file doesn't exist, instructing to build first
+    const workerScriptPath = join(__dirname, 'tool-worker.js');
     
-    // Try .js first (production/compiled), then .ts (dev/test)
-    // If neither exists, throw a clear error
-    let workerScriptPath: string;
-    if (existsSync(workerScriptPathJs)) {
-      workerScriptPath = workerScriptPathJs;
-    } else if (existsSync(workerScriptPathTs)) {
-      workerScriptPath = workerScriptPathTs;
-    } else {
+    if (!existsSync(workerScriptPath)) {
       throw new Error(
-        `Worker script not found. Expected ${workerScriptPathJs} or ${workerScriptPathTs}. ` +
-        `If running in dev/test, ensure the file exists. If running in production, run 'npm run build' first.`
+        `Worker script not found: ${workerScriptPath}. ` +
+        `The tool-worker.js file must exist for worker thread execution. ` +
+        `If running in dev/test, run 'npm run build' first to compile TypeScript files. ` +
+        `Node.js Worker cannot execute .ts files directly without a TypeScript loader.`
       );
     }
     
@@ -255,6 +296,21 @@ export class SandboxedToolRunner {
         }
       });
       
+      // P3: Validate input is structured-clone compatible before postMessage
+      // assertSafeObject doesn't reject functions/symbols, but postMessage requires structured-clone compatibility
+      // This prevents DataCloneError that would be hard to diagnose
+      try {
+        assertStructuredCloneCompatible(input, 'input');
+      } catch (error) {
+        completed = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        worker.terminate();
+        reject(new Error(`Tool ${toolName} input contains non-serializable values: ${error instanceof Error ? error.message : String(error)}`));
+        return;
+      }
+
       // Send execution request with tool name and input
       // Worker will look up tool in registry and execute it
       worker.postMessage({ toolName, input, requestId });
