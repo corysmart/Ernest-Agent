@@ -130,16 +130,29 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   });
   const promptFilter = new PromptInjectionFilter();
   const outputValidator = new ZodOutputValidator(decisionSchema);
-  // P2: Enable worker thread isolation via env flag for true process-level isolation
-  // When TOOL_USE_WORKERS=true, tools execute in worker threads with hard kill-on-timeout
-  // This prevents CPU-bound tools from freezing the event loop
-  const useWorkerThreads = process.env.TOOL_USE_WORKERS === 'true';
+  // P2: Enable worker thread isolation by default for secure-by-default guarantees
+  // In production, worker threads are enabled by default to prevent CPU-bound tools from freezing the event loop
+  // Can be explicitly disabled with TOOL_USE_WORKERS=false (e.g., for local development)
+  // In non-production, can be enabled with TOOL_USE_WORKERS=true
+  const useWorkerThreads = process.env.TOOL_USE_WORKERS === 'false'
+    ? false
+    : process.env.NODE_ENV === 'production' || process.env.TOOL_USE_WORKERS === 'true';
+  
+  // P2: Fail startup in production if worker threads are explicitly disabled
+  if (process.env.NODE_ENV === 'production' && process.env.TOOL_USE_WORKERS === 'false') {
+    throw new Error(
+      'P2: Tool isolation is required in production. ' +
+      'Worker thread isolation cannot be disabled in production for security. ' +
+      'Remove TOOL_USE_WORKERS=false or set TOOL_USE_WORKERS=true'
+    );
+  }
+  
   const toolRunner = new SandboxedToolRunner({
     tools: {
       pursue_goal: async (input) => ({ acknowledged: true, input })
     },
     timeoutMs: Number(process.env.TOOL_TIMEOUT_MS ?? 30000), // 30 seconds default
-    useWorkerThreads // P2: Wire worker thread isolation from env
+    useWorkerThreads // P2: Secure-by-default: enabled in production, opt-in elsewhere
   });
   const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
 
