@@ -42,11 +42,22 @@ function assertStructuredCloneCompatible(value: unknown, path = 'root'): void {
         assertStructuredCloneCompatible(item, `${path}[${index}]`);
       });
     } else {
-      // Plain objects - check all properties
-      for (const key in value) {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          assertStructuredCloneCompatible((value as Record<string, unknown>)[key], `${path}.${key}`);
-        }
+      // P3: Check all properties including non-enumerable and symbol keys
+      // for...in only sees enumerable string keys, which can miss non-cloneable values
+      // Use Object.getOwnPropertyNames() for all string keys (enumerable and non-enumerable)
+      // and Object.getOwnPropertySymbols() for symbol keys
+      const obj = value as Record<string | symbol, unknown>;
+      
+      // Check all string keys (enumerable and non-enumerable)
+      const stringKeys = Object.getOwnPropertyNames(obj);
+      for (const key of stringKeys) {
+        assertStructuredCloneCompatible(obj[key], `${path}.${String(key)}`);
+      }
+      
+      // Check all symbol keys
+      const symbolKeys = Object.getOwnPropertySymbols(obj);
+      for (const key of symbolKeys) {
+        assertStructuredCloneCompatible(obj[key], `${path}[Symbol(${key.description || 'unnamed'})]`);
       }
     }
   }
@@ -117,6 +128,16 @@ export class SandboxedToolRunner {
     this.timeoutMs = options.timeoutMs ?? 30000; // 30 seconds default
     this.useWorkerThreads = options.useWorkerThreads ?? false;
     this.requireIsolation = options.requireIsolation ?? false;
+    
+    // P2: Enforce requireIsolation flag - if isolation is required, worker threads must be enabled
+    // This prevents false sense of security where requireIsolation=true but tools still run in-process
+    if (this.requireIsolation && !this.useWorkerThreads) {
+      throw new Error(
+        'requireIsolation=true requires useWorkerThreads=true. ' +
+        'Worker thread isolation is required for security, but useWorkerThreads is false. ' +
+        'Set useWorkerThreads=true to enable process-level isolation, or set requireIsolation=false if in-process execution is acceptable.'
+      );
+    }
   }
 
   /**
@@ -151,7 +172,12 @@ export class SandboxedToolRunner {
     }
 
     // P2: Get handler from registry (module-based, no eval) or constructor (for in-process only)
-    const handler = toolRegistry.get(toolName) ?? this.tools[toolName];
+    // P3: In in-process mode, prefer constructor tools to allow test overrides
+    // In worker thread mode, only registry tools are supported
+    const handler = this.useWorkerThreads
+      ? toolRegistry.get(toolName) // Worker threads: only registry tools
+      : (this.tools[toolName] ?? toolRegistry.get(toolName)); // In-process: constructor tools can override registry
+    
     if (!handler) {
       throw new Error(`Tool ${toolName} not permitted or not found in registry`);
     }
