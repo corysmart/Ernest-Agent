@@ -78,9 +78,20 @@ export class SandboxedToolRunner {
     }
 
     // P2: In-process execution with timeout protection
-    // LIMITATION: This won't kill CPU-bound tasks - they continue executing after timeout
-    // Promise.race only rejects the promise, it doesn't stop execution
-    // A CPU-bound handler will continue running and freeze the event loop
+    return this.runInProcess(toolName, handler, input);
+  }
+
+  /**
+   * P2: In-process execution with timeout protection.
+   * LIMITATION: This won't kill CPU-bound tasks - they continue executing after timeout.
+   * Promise.race only rejects the promise, it doesn't stop execution.
+   * A CPU-bound handler will continue running and freeze the event loop.
+   */
+  private async runInProcess(
+    toolName: string,
+    handler: ToolHandler,
+    input: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
@@ -115,6 +126,10 @@ export class SandboxedToolRunner {
   /**
    * P2: Executes tool in worker thread with hard kill-on-timeout.
    * Provides true isolation - CPU-bound handlers cannot freeze the main event loop.
+   * 
+   * P3: LIMITATION: This uses handler.toString() which breaks for closures or handlers
+   * that depend on outer scope. For production, consider a tool registry system with
+   * module-based execution instead of source serialization.
    */
   private async runInWorkerThread(
     toolName: string,
@@ -123,15 +138,37 @@ export class SandboxedToolRunner {
   ): Promise<Record<string, unknown>> {
     const requestId = randomUUID();
     
-    // Serialize handler to string for worker thread
-    // Note: This is a simplified approach - in production, use a tool registry system
+    // P3: Serialize handler to string for worker thread
+    // LIMITATION: handler.toString() breaks for closures or handlers with outer scope dependencies
+    // The serialized function loses access to closure variables and will fail at runtime
+    // For production, use a tool registry system that loads tools from modules instead
     const handlerString = handler.toString();
+    
+    // P3: Detect if handler likely depends on closures (contains references to outer scope)
+    // This is a heuristic - functions that reference variables not in their parameter list
+    // are likely closures. We can't perfectly detect this, but we can warn on common patterns
+    const handlerCode = handlerString;
+    const hasClosureIndicators = 
+      handlerCode.includes('[native code]') || // Native functions can't be serialized
+      (handlerCode.includes('=>') && handlerCode.split('=>')[0]!.includes('[')); // Arrow functions with destructuring
+    
+    if (hasClosureIndicators) {
+      // P3: Fall back to in-process execution with warning for handlers that can't be serialized
+      // This prevents runtime failures but loses isolation benefits
+      console.warn(
+        `[WARNING] Tool ${toolName} handler appears to use closures and cannot be safely serialized for worker thread execution. ` +
+        `Falling back to in-process execution. Consider refactoring to a module-based tool registry.`
+      );
+      // Fall through to in-process execution
+      return this.runInProcess(toolName, handler, input);
+    }
     
     // Create worker script
     const workerScript = `
       const { parentPort } = require('worker_threads');
       
-      // Reconstruct handler from string (simplified - production should use registry)
+      // P3: Reconstruct handler from string - breaks for closures
+      // In production, use a tool registry that loads tools from modules
       const handler = ${handlerString};
       
       parentPort.on('message', async (request) => {

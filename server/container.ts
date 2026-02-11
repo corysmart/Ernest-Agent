@@ -147,11 +147,22 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
     );
   }
   
+  // P3: Validate TOOL_TIMEOUT_MS to prevent NaN from causing immediate timeouts
+  // If env var is non-numeric, Number() returns NaN, which makes setTimeout behave as 0ms
+  const timeoutMsRaw = Number(process.env.TOOL_TIMEOUT_MS ?? 30000);
+  if (!Number.isFinite(timeoutMsRaw) || timeoutMsRaw <= 0) {
+    throw new Error(
+      `Invalid TOOL_TIMEOUT_MS: ${process.env.TOOL_TIMEOUT_MS}. ` +
+      `Must be a positive number. Got: ${timeoutMsRaw}`
+    );
+  }
+  const timeoutMs = timeoutMsRaw;
+  
   const toolRunner = new SandboxedToolRunner({
     tools: {
       pursue_goal: async (input) => ({ acknowledged: true, input })
     },
-    timeoutMs: Number(process.env.TOOL_TIMEOUT_MS ?? 30000), // 30 seconds default
+    timeoutMs, // P3: Validated to be a finite positive number
     useWorkerThreads // P2: Secure-by-default: enabled in production, opt-in elsewhere
   });
   const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
