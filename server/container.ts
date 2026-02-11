@@ -163,7 +163,8 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
       pursue_goal: async (input) => ({ acknowledged: true, input })
     },
     timeoutMs, // P3: Validated to be a finite positive number
-    useWorkerThreads // P2: Secure-by-default: enabled in production, opt-in elsewhere
+    useWorkerThreads, // P2: Secure-by-default: enabled in production, opt-in elsewhere
+    requireIsolation: process.env.NODE_ENV === 'production' // P2: Require isolation in production
   });
   const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
 

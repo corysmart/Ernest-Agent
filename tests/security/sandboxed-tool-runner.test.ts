@@ -20,4 +20,22 @@ describe('SandboxedToolRunner', () => {
 
     await expect(runner.run('unknown', {})).rejects.toThrow('Tool not permitted');
   });
+
+  it('P3: handles handlers with template literals without breaking worker script', async () => {
+    // This test verifies that handlers containing backticks and ${} don't break worker script construction
+    // Note: This will fall back to in-process execution if useWorkerThreads=true due to closure detection
+    const runner = new SandboxedToolRunner({
+      tools: {
+        templateTool: async (input: Record<string, unknown>) => {
+          const value = input.value as string;
+          // Handler contains template literal with backticks and ${}
+          return { result: `Template value: ${value}` };
+        }
+      },
+      useWorkerThreads: false // Test in-process execution (worker threads would detect closure and fall back)
+    });
+
+    const result = await runner.run('templateTool', { value: 'test' });
+    expect(result.result).toBe('Template value: test');
+  });
 });

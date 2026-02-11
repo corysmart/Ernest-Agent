@@ -18,6 +18,12 @@ interface SandboxedToolRunnerOptions {
    * Default: false (in-process execution with timeout protection).
    */
   useWorkerThreads?: boolean;
+  /**
+   * P2: Require worker thread isolation (fail if serialization fails).
+   * When true, throws an error if handler cannot be serialized instead of falling back.
+   * Should be true in production when isolation is required for security.
+   */
+  requireIsolation?: boolean;
 }
 
 /**
@@ -50,11 +56,17 @@ export class SandboxedToolRunner {
    * When true, tools execute in worker threads with hard kill-on-timeout.
    */
   private readonly useWorkerThreads: boolean;
+  /**
+   * P2: Require worker thread isolation (fail if serialization fails).
+   * When true, throws an error if handler cannot be serialized instead of falling back.
+   */
+  private readonly requireIsolation: boolean;
 
   constructor(options: SandboxedToolRunnerOptions) {
     this.tools = options.tools;
     this.timeoutMs = options.timeoutMs ?? 30000; // 30 seconds default
     this.useWorkerThreads = options.useWorkerThreads ?? false;
+    this.requireIsolation = options.requireIsolation ?? false;
   }
 
   /**
@@ -144,32 +156,52 @@ export class SandboxedToolRunner {
     // For production, use a tool registry system that loads tools from modules instead
     const handlerString = handler.toString();
     
-    // P3: Detect if handler likely depends on closures (contains references to outer scope)
-    // This is a heuristic - functions that reference variables not in their parameter list
-    // are likely closures. We can't perfectly detect this, but we can warn on common patterns
-    const handlerCode = handlerString;
-    const hasClosureIndicators = 
+    // P3: Detect if handler is non-serializable (closures, method shorthand, class methods, etc.)
+    // Method shorthand (e.g., foo(a){...}) and class methods are not valid standalone function declarations
+    // and will crash the worker when assigned to const handler = ...
+    const handlerCode = handlerString.trim();
+    const isNonSerializable = 
       handlerCode.includes('[native code]') || // Native functions can't be serialized
-      (handlerCode.includes('=>') && handlerCode.split('=>')[0]!.includes('[')); // Arrow functions with destructuring
+      handlerCode.startsWith('[') || // Array methods
+      handlerCode.startsWith('class ') || // Class methods
+      /^\w+\s*\(/.test(handlerCode) && !handlerCode.startsWith('function') && !handlerCode.startsWith('async') && !handlerCode.includes('=>'); // Method shorthand (e.g., "foo(a) {...}")
     
-    if (hasClosureIndicators) {
-      // P3: Fall back to in-process execution with warning for handlers that can't be serialized
-      // This prevents runtime failures but loses isolation benefits
-      console.warn(
-        `[WARNING] Tool ${toolName} handler appears to use closures and cannot be safely serialized for worker thread execution. ` +
-        `Falling back to in-process execution. Consider refactoring to a module-based tool registry.`
-      );
-      // Fall through to in-process execution
+    if (isNonSerializable) {
+      const errorMessage = `Tool ${toolName} handler cannot be serialized for worker thread execution. ` +
+        `Handler appears to be a method shorthand, class method, or closure. ` +
+        `Consider refactoring to a standalone function or using a module-based tool registry.`;
+      
+      // P2: In production or when isolation is required, fail instead of silently downgrading
+      if (this.requireIsolation || process.env.NODE_ENV === 'production') {
+        throw new Error(
+          `P2: Worker thread isolation is required but handler serialization failed. ${errorMessage}`
+        );
+      }
+      
+      // P3: In non-production, fall back with warning
+      console.warn(`[WARNING] ${errorMessage} Falling back to in-process execution.`);
       return this.runInProcess(toolName, handler, input);
     }
     
+    // P3: Escape handler string to prevent template literal injection
+    // If handler contains backticks or ${...}, it would corrupt the worker script
+    // We're inserting into a template literal, so we need to escape:
+    // - Backslashes first (so other escapes work)
+    // - Backticks (to prevent closing the template literal)
+    // - ${ (to prevent template literal interpolation)
+    const escapedHandlerString = handlerString
+      .replace(/\\/g, '\\\\')   // Escape backslashes first (\\ becomes \\\\)
+      .replace(/`/g, '\\`')     // Escape backticks (` becomes \`)
+      .replace(/\$\{/g, '\\${'); // Escape template literal expressions (${ becomes \${)
+    
     // Create worker script
+    // P3: Use escaped handler string to prevent template literal injection
     const workerScript = `
       const { parentPort } = require('worker_threads');
       
       // P3: Reconstruct handler from string - breaks for closures
       // In production, use a tool registry that loads tools from modules
-      const handler = ${handlerString};
+      const handler = ${escapedHandlerString};
       
       parentPort.on('message', async (request) => {
         try {
