@@ -195,12 +195,19 @@ export class SandboxedToolRunner {
       .replace(/\$\{/g, '\\${'); // Escape template literal expressions (${ becomes \${)
     
     // Create worker script
+    // P2: WARNING - This uses eval via handler.toString() and string interpolation
+    // If tool handlers come from dynamic plugins or untrusted sources, this is effectively RCE in a worker
+    // For production use with untrusted handlers, implement a module-based tool registry:
+    // - Static imports of tool handlers from known modules
+    // - IPC-based communication (no eval)
+    // - Tool registry that validates and loads tools at startup
     // P3: Use escaped handler string to prevent template literal injection
     const workerScript = `
       const { parentPort } = require('worker_threads');
       
-      // P3: Reconstruct handler from string - breaks for closures
-      // In production, use a tool registry that loads tools from modules
+      // P2: Reconstruct handler from string - SECURITY RISK if handlers are untrusted
+      // This uses eval-like behavior and should only be used with trusted, statically-defined handlers
+      // For untrusted handlers, use a module-based tool registry with static imports + IPC
       const handler = ${escapedHandlerString};
       
       parentPort.on('message', async (request) => {

@@ -45,6 +45,8 @@ export class GoalStack {
       return null;
     }
     
+    // P3: Deep copy candidateActions and their payloads to prevent mutation of nested objects
+    // This matches the pattern used in listGoals() to ensure complete immutability
     return {
       id: selectedGoal.id,
       title: selectedGoal.title,
@@ -54,7 +56,10 @@ export class GoalStack {
       horizon: selectedGoal.horizon,
       createdAt: selectedGoal.createdAt,
       updatedAt: selectedGoal.updatedAt,
-      candidateActions: selectedGoal.candidateActions ? [...selectedGoal.candidateActions] : undefined
+      candidateActions: selectedGoal.candidateActions?.map((action) => ({
+        ...action,
+        payload: action.payload ? JSON.parse(JSON.stringify(action.payload)) : undefined
+      }))
     };
   }
 

@@ -143,7 +143,10 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
           }
         }
         
-        await vectorStore.upsert(vectorRecords);
+        // P3: Skip upsert if batch is empty to avoid errors from vector stores that reject empty input
+        if (vectorRecords.length > 0) {
+          await vectorStore.upsert(vectorRecords);
+        }
         totalReindexed += vectorRecords.length;
         
         // If we got fewer than pageSize, we've reached the end

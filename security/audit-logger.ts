@@ -353,8 +353,12 @@ export class StructuredAuditLogger implements AuditLogger {
     // P2: Await async audit loggers to ensure logs are persisted
     // Network loggers (e.g., sending to external service) need to be awaited
     // to prevent log loss if the process exits before the async operation completes
+    // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     const result = this.logger.log(entry);
     if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+      // Handle thenables (objects with .then() method that aren't Promise instances)
       await result;
     }
   }

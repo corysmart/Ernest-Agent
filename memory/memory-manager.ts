@@ -72,7 +72,19 @@ export class MemoryManager implements IMemoryManager {
     
     // P3: Push ALL type filters into vector metadata queries to prevent dilution
     // Vector store now supports array values for multi-type filtering
-    const requestedLimit = query.limit ?? 5;
+    // P3: Validate limit to prevent negative, zero, NaN, or excessive values
+    const rawLimit = query.limit ?? 5;
+    const MAX_QUERY_LIMIT = 1000; // Upper bound to prevent DoS
+    let requestedLimit: number;
+    if (!Number.isFinite(rawLimit) || rawLimit <= 0) {
+      console.warn(`[WARNING] Invalid query limit: ${rawLimit}. Using default: 5`);
+      requestedLimit = 5;
+    } else if (rawLimit > MAX_QUERY_LIMIT) {
+      console.warn(`[WARNING] Query limit ${rawLimit} exceeds maximum ${MAX_QUERY_LIMIT}. Capping to ${MAX_QUERY_LIMIT}`);
+      requestedLimit = MAX_QUERY_LIMIT;
+    } else {
+      requestedLimit = Math.floor(rawLimit); // Ensure integer
+    }
     const hasTypeFilter = query.types && query.types.length > 0;
     
     // Build filter combining scope and type filters

@@ -22,11 +22,13 @@ export class AgentRegistry {
       return undefined;
     }
     
+    // P3: Include createdAt to match behavior of list() / listByRole() and prevent behavioral regression
     return {
       id: agent.id,
       role: agent.role,
       capabilities: agent.capabilities ? [...agent.capabilities] : [],
-      allowedMemoryScopes: [...agent.allowedMemoryScopes]
+      allowedMemoryScopes: [...agent.allowedMemoryScopes],
+      createdAt: agent.createdAt
     };
   }
 
