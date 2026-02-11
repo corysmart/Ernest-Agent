@@ -12,6 +12,7 @@ module.exports = {
     'agents/**/*.ts',
     'llm/**/*.ts',
     'env/**/*.ts',
+    'runtime/**/*.ts',
     'server/**/*.ts',
     'security/**/*.ts'
   ],

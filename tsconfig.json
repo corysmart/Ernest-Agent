@@ -22,7 +22,7 @@
     "goals/**/*.ts",
     "agents/**/*.ts",
     "llm/**/*.ts",
-    "env/**/*.ts",
+    "env/**/*.ts","runtime/**/*.ts",
     "server/**/*.ts",
     "security/**/*.ts",
     "scripts/**/*.ts"

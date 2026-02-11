@@ -11,3 +11,7 @@ export const pursueGoal: ToolHandler = async (input: Record<string, unknown>) =>
   return { acknowledged: true, input };
 };
 
+
+
+
+

@@ -32,6 +32,7 @@ The system is structured as a layered architecture with strict boundaries:
 - **Goal planning**: a hierarchical goal stack and planner that uses simulation to select actions.
 - **Multi-agent coordination**: an agent registry and message bus with explicit memory boundary controls.
 - **Secure execution boundaries**: prompt injection filtering, output validation, tool permission gating, and sandboxed tool execution.
+- **Runtime / Autonomy**: heartbeat-driven orchestration, event triggers, per-tenant budgets (max runs/hour, max tokens/day), circuit breaker with cooldown, kill switch, and structured audit logging. Text-only observation pipeline with input size caps and safe object validation.
 
 The LLM is a replaceable inference engine; cognition and safety are system responsibilities.
 
@@ -70,6 +71,7 @@ The system is secure by default and assumes adversarial inputs.
 - Multi-agent registry and message bus
 - Security layer (validation, sandboxing, gating, SSRF/path protections)
 - Fastify API for one-shot agent execution
+- **Runtime**: `AgentRuntime` with heartbeat, `emitEvent()`, budget guardrails, circuit breaker, kill switch; `ObservationAdapter` and `ObservationNormalizer` for text-only observations
 
 **Planned / next milestones:**
 
