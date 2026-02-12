@@ -181,23 +181,57 @@ export async function main(): Promise<void> {
         payload = await promptForRun(action as RunMode);
       }
 
-      console.log('\nRunning...');
-      const result = await runOnce(payload);
-      console.log(formatResult(result));
+      let result: RunOnceResponse;
+      let succeeded = false;
+      for (;;) {
+        const startMs = Date.now();
+        const progressInterval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startMs) / 1000);
+          process.stdout.write(`\r\x1b[KRunning... ${elapsed}s (open ${getBaseUrl().replace('127.0.0.1', 'localhost')}/ui for live progress)\x1b[0m`);
+        }, 1000);
+        try {
+          result = await runOnce(payload);
+          clearInterval(progressInterval);
+          process.stdout.write('\r\x1b[K');
+          console.log(formatResult(result));
+          if (result.status !== 'error') {
+            succeeded = true;
+            break;
+          }
+          const shouldRetry = await confirm({
+            message: 'Agent reported an error. Retry this request?',
+            default: true
+          });
+          if (!shouldRetry) break;
+          console.log('\nRetrying...');
+        } catch (err) {
+          clearInterval(progressInterval);
+          process.stdout.write('\r\x1b[K');
+          console.error('\n✗ Request failed:', err instanceof Error ? err.message : String(err));
+          const shouldRetry = await confirm({
+            message: 'Retry this request?',
+            default: true
+          });
+          if (!shouldRetry) throw err;
+          console.log('\nRetrying...');
+        }
+      }
 
-      const userMsg = (payload.observation.state?.user_message as string) || '';
-      const assistantContent = extractAssistantContent(result);
-      const mode = (payload.dryRun === 'with-llm' ? 'dry-with-llm' : payload.dryRun === 'without-llm' ? 'dry-without-llm' : 'run') as RunMode;
-      const prevHistory: ConversationEntry[] = action === 'follow-up' && lastExchange ? lastExchange.conversationHistory : [];
-      lastExchange = {
-        conversationHistory: [
-          ...prevHistory,
-          { role: 'user' as const, content: userMsg },
-          { role: 'assistant' as const, content: assistantContent }
-        ],
-        mode,
-        goal: payload.goal
-      };
+      if (succeeded && result!) {
+        const userMsg = (payload.observation.state?.user_message as string) || '';
+        const assistantContent = extractAssistantContent(result);
+        const mode = (payload.dryRun === 'with-llm' ? 'dry-with-llm' : payload.dryRun === 'without-llm' ? 'dry-without-llm' : 'run') as RunMode;
+        const prevHistory: ConversationEntry[] = action === 'follow-up' && lastExchange ? lastExchange.conversationHistory : [];
+        lastExchange = {
+          conversationHistory: [
+            ...prevHistory,
+            { role: 'user' as const, content: userMsg },
+            { role: 'assistant' as const, content: assistantContent }
+          ],
+          mode,
+          goal: payload.goal
+        };
+      }
 
       await input({ message: 'Press Enter to continue', default: '' });
     } catch (err) {

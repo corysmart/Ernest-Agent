@@ -20,6 +20,14 @@ interface RunEntry {
   durationMs?: number;
 }
 
+interface ActiveRunEntry {
+  requestId: string;
+  tenantId?: string;
+  startTime: number;
+  currentState: string;
+  stateTrace: string[];
+}
+
 interface AuditEventEntry {
   timestamp: number;
   tenantId?: string;
@@ -38,6 +46,7 @@ type Tab = 'runs' | 'events' | 'docs';
 function App() {
   const [tab, setTab] = useState<Tab>('runs');
   const [runs, setRuns] = useState<RunEntry[]>([]);
+  const [activeRuns, setActiveRuns] = useState<ActiveRunEntry[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [events, setEvents] = useState<AuditEventEntry[]>([]);
   const [docs, setDocs] = useState<DocEntry[]>([]);
@@ -54,6 +63,18 @@ function App() {
       }
     } catch {
       setRuns([]);
+    }
+  }, []);
+
+  const fetchActiveRuns = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/ui/active-runs`);
+      if (res.ok) {
+        const data = await res.json();
+        setActiveRuns(data);
+      }
+    } catch {
+      setActiveRuns([]);
     }
   }, []);
 
@@ -89,6 +110,7 @@ function App() {
     try {
       await fetch(`${API}/ui/clear`, { method: 'POST' });
       setRuns([]);
+      setActiveRuns([]);
       setEvents([]);
       setDocContent('');
       setSelectedDoc(null);
@@ -98,25 +120,66 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (tab === 'runs') fetchRuns();
+    if (tab === 'runs') {
+      fetchRuns();
+      fetchActiveRuns();
+    }
     if (tab === 'docs') fetchDocs();
-  }, [tab, fetchRuns, fetchDocs]);
+  }, [tab, fetchRuns, fetchActiveRuns, fetchDocs]);
+
+  useEffect(() => {
+    if (tab !== 'runs' || activeRuns.length === 0) return;
+    const interval = setInterval(fetchActiveRuns, 2000);
+    return () => clearInterval(interval);
+  }, [tab, activeRuns.length, fetchActiveRuns]);
 
   useEffect(() => {
     if (selectedDoc) fetchDocContent(selectedDoc);
   }, [selectedDoc, fetchDocContent]);
 
   useEffect(() => {
+    fetchActiveRuns();
     const ev = new EventSource(`${API}/ui/events`);
-    ev.onopen = () => setEventsConnected(true);
+    ev.onopen = () => {
+      setEventsConnected(true);
+      fetchActiveRuns();
+    };
     ev.onerror = () => setEventsConnected(false);
     ev.onmessage = (e) => {
       try {
         const entry = JSON.parse(e.data) as AuditEventEntry;
         setEvents((prev) => [entry, ...prev].slice(0, 500));
+        if (entry.eventType === 'run_start' && entry.requestId) {
+          const reqId = entry.requestId;
+          setActiveRuns((prev) => {
+            if (prev.some((r) => r.requestId === reqId)) return prev;
+            return [...prev, { requestId: reqId, tenantId: entry.tenantId, startTime: entry.timestamp, currentState: 'observe', stateTrace: [] }];
+          });
+        }
+        if (entry.eventType === 'run_progress' && entry.requestId && entry.data && typeof entry.data === 'object') {
+          const data = entry.data as { state?: string; stateTrace?: string[] };
+          const rid: string = entry.requestId;
+          setActiveRuns((prev) => {
+            const existing = prev.find((r) => r.requestId === rid);
+            if (existing) {
+              return prev.map((r) =>
+                r.requestId === rid ? { ...r, currentState: data.state ?? r.currentState, stateTrace: (data.stateTrace ?? r.stateTrace) as string[] } : r
+              );
+            }
+            const newRun: ActiveRunEntry = {
+              requestId: rid,
+              tenantId: entry.tenantId,
+              startTime: entry.timestamp,
+              currentState: data.state ?? 'observe',
+              stateTrace: (data.stateTrace ?? []) as string[]
+            };
+            return [...prev, newRun];
+          });
+        }
         if (entry.eventType === 'run_complete' && entry.data && typeof entry.data === 'object') {
           const run = entry.data as unknown as RunEntry;
           if (run.requestId != null && run.timestamp != null) {
+            setActiveRuns((prev) => prev.filter((r) => r.requestId !== run.requestId));
             setRuns((prev) => [run, ...prev.filter((r) => r.requestId !== run.requestId)].slice(0, 100));
           }
         }
@@ -145,6 +208,17 @@ function App() {
       <main className="app-main">
         {tab === 'runs' && (
           <div className="panel">
+            {activeRuns.length > 0 && (
+              <div className="active-runs-banner">
+                <span className="spinner" aria-hidden />
+                <strong>{activeRuns.length} run{activeRuns.length > 1 ? 's' : ''} in progress:</strong>
+                {activeRuns.map((a) => (
+                  <span key={a.requestId} className="active-run-state">
+                    {a.requestId} → {a.stateTrace?.length ? a.stateTrace.join(' → ') : a.currentState}
+                  </span>
+                ))}
+              </div>
+            )}
             <button type="button" className="refresh-btn" onClick={fetchRuns}>Refresh</button>
             <table className="runs-table">
               <thead>

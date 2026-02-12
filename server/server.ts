@@ -256,6 +256,10 @@ export async function buildServer(options?: { logger?: boolean }) {
       dryRun: dryRun ?? false
     });
 
+    if (obsStore) {
+      obsStore.addRunStart(requestId, tenantId);
+    }
+
     const result = await agent.runOnce();
 
     if (obsStore) {

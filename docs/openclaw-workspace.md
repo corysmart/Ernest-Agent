@@ -75,3 +75,9 @@ cp /path/to/openclaw/docs/reference/templates/TOOLS.md ~/.openclaw/workspace/
 ```
 
 See [OpenClaw reference](https://docs.openclaw.ai/reference/AGENTS.default) for full template docs.
+
+This repo also includes a local snapshot of defaults in `docs/openclaw-workspace-defaults/` with an installer script:
+
+```bash
+./scripts/install-openclaw-workspace-defaults.sh
+```

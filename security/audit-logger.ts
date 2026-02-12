@@ -2,7 +2,7 @@ export interface AuditLogEntry {
   timestamp: number;
   tenantId?: string;
   requestId?: string;
-  eventType: 'agent_decision' | 'tool_call' | 'llm_request' | 'error';
+  eventType: 'agent_decision' | 'tool_call' | 'llm_request' | 'error' | 'run_start' | 'run_progress';
   data: Record<string, unknown>;
 }
 
@@ -315,6 +315,26 @@ export class StructuredAuditLogger implements AuditLogger {
     });
     // P2: Await async audit loggers to ensure logs are persisted
     // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
+    if (result instanceof Promise) {
+      await result;
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
+      await result;
+    }
+  }
+
+  async logRunProgress(params: {
+    tenantId?: string;
+    requestId?: string;
+    state: string;
+    stateTrace: string[];
+  }): Promise<void> {
+    const result = this.logger.log({
+      timestamp: Date.now(),
+      tenantId: params.tenantId,
+      requestId: params.requestId,
+      eventType: 'run_progress',
+      data: { state: params.state, stateTrace: params.stateTrace }
+    });
     if (result instanceof Promise) {
       await result;
     } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
