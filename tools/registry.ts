@@ -25,6 +25,7 @@ import { readFile } from './read-file';
 import { listDir } from './list-dir';
 import { runCommand } from './run-command';
 import { writeFile } from './write-file';
+import { createWorkspace } from './create-workspace';
 
 export interface ToolDefinition {
   name: string;
@@ -186,6 +187,11 @@ export function initializeToolRegistry(): void {
     handler: writeFile,
     description: 'Write content to a file. Use to update HEARTBEAT.md or task state.'
   });
+  toolRegistry.register({
+    name: 'create_workspace',
+    handler: createWorkspace,
+    description: 'Create a new workspace directory within file workspace root. Supports risky mode for sibling project bootstrapping.'
+  });
 
   // Add more tools here as they are created
   // Example:
@@ -199,4 +205,3 @@ export function initializeToolRegistry(): void {
   // This enforces the "static imports only" security policy
   toolRegistry.lock();
 }
-

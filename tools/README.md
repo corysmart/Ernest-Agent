@@ -6,6 +6,11 @@ Tools the agent can invoke when given appropriate goals.
 
 These tools let the agent read, list, run commands, and write files within a workspace. They are scoped by `FILE_WORKSPACE_ROOT` (fallback: `CODEX_CWD`, then `process.cwd()`). Supports `~` expansion.
 
+Default mode is safe. To intentionally allow sibling project bootstrapping (e.g., creating `ernest-mail` next to this repo), enable risky mode:
+
+- `RISKY_WORKSPACE_MODE=true` or `FILE_WORKSPACE_MODE=risky`
+- Optional `RISKY_WORKSPACE_ROOT=/path/to/repositories` (defaults to parent of safe root)
+
 ### read_file
 
 Read file contents from the workspace. Used to inspect HEARTBEAT.md, source files, etc.
@@ -56,6 +61,20 @@ Write content to a file. Used to update HEARTBEAT.md or task state.
 **Returns:** `{ success, error? }`
 
 Creates parent directories if needed.
+
+### create_workspace
+
+Creates a new workspace directory under the resolved file workspace root. Useful for starting a separate project repo.
+
+| Input       | Type    | Description                                           |
+|-------------|---------|-------------------------------------------------------|
+| name        | string  | Workspace name (used when `path` not provided)        |
+| path        | string  | Relative path under workspace root (overrides `name`) |
+| allowExisting | boolean | Allow non-empty existing workspace (default false)  |
+| createReadme | boolean | Create `README.md` if missing (default true)         |
+| readmeTitle | string  | Optional README title                                 |
+
+**Returns:** `{ success, created, path, workspaceRoot, riskyMode, error? }`
 
 ## CLI Tools (invoke_codex, invoke_claude)
 

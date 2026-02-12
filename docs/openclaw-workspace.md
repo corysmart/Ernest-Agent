@@ -67,6 +67,8 @@ This repo ships starter files in `docs/openclaw-workspace-defaults/` and an inst
 ./scripts/install-openclaw-workspace-defaults.sh /path/to/workspace
 ```
 
+By default, the installer writes to repo-local `workspace/` (gitignored).
+
 The installer currently copies:
 
 - `AGENTS.md`
@@ -89,7 +91,7 @@ Notes:
 
 In `server/server.ts`, `/agent/run-once` composes observations as:
 
-1. `OpenClawWorkspaceAdapter({ workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace', includeDailyMemory: true })`
+1. `OpenClawWorkspaceAdapter({ workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '<cwd>/workspace', includeDailyMemory: true })`
 2. `RequestObservationAdapter({ timestamp, state, events, conversation_history })`
 
 These are merged through `CompositeObservationAdapter([openclaw, requestAdapter])`, so request keys override workspace keys when both are present. Skills are not loaded by default in server mode (`includeSkills` is not enabled).

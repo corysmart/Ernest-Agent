@@ -238,6 +238,7 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
     allow: [
       'pursue_goal', 'invoke_codex', 'invoke_claude', 'send_email', 'schedule_task', 'get_recent_runs',
       'create_test_email_account', 'save_email_config', 'read_file', 'list_dir', 'run_command', 'write_file',
+      'create_workspace',
       'complete_run'
     ]
   });

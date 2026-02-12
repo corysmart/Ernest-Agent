@@ -25,6 +25,7 @@ import type { SandboxedToolRunner } from '../security/sandboxed-tool-runner';
 import type { Container } from '../core/di/container';
 import type { ObservabilityStore } from './observability-store';
 import { createObservabilityAuditLogger } from './observability-audit-forwarder';
+import { resolve } from 'path';
 
 export interface ExecuteAgentRunParams {
   observation: {
@@ -87,7 +88,8 @@ export async function executeAgentRun(
   }
 
   const openclaw = new OpenClawWorkspaceAdapter({
-    workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace',
+    // Default to repo-local workspace/ for easier local development.
+    workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? resolve(process.cwd(), 'workspace'),
     includeDailyMemory: true
   });
   const requestAdapter = new RequestObservationAdapter({

@@ -154,3 +154,11 @@ Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
 - `SCHEDULED_TASKS_PATH` – Path to JSON file (default: `data/scheduled-tasks.json`)
 
 Tasks are persisted but not executed until a scheduler reads the file and triggers runs. See [tools/README.md](../tools/README.md) for tool usage.
+
+### File Workspace Tools (tools)
+
+The agent can use `read_file`, `list_dir`, `run_command`, `write_file`, and `create_workspace` under a resolved file workspace root.
+
+- Safe root: `FILE_WORKSPACE_ROOT` (fallback `CODEX_CWD`, then `process.cwd()`).
+- Risky mode (opt-in): `RISKY_WORKSPACE_MODE=true` or `FILE_WORKSPACE_MODE=risky`.
+- Optional risky root override: `RISKY_WORKSPACE_ROOT=/path/to/repos` (default: parent of safe root).

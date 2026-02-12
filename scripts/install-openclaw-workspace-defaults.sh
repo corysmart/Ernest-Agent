@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_DIR="$REPO_ROOT/docs/openclaw-workspace-defaults"
-TARGET_DIR="${1:-$HOME/.openclaw/workspace}"
+DEFAULT_TARGET_DIR="$REPO_ROOT/workspace"
+TARGET_DIR="${1:-$DEFAULT_TARGET_DIR}"
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
   echo "Source templates not found: $SOURCE_DIR" >&2

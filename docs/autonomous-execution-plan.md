@@ -15,10 +15,13 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 | 5. Multi-act loop | Done |
 | 6. Heartbeat trigger | Done |
 | 7. Registry, permissions, docs | Done |
+| 8. create_workspace + risky mode | Done |
 
 ## Env Vars
 
 - `FILE_WORKSPACE_ROOT` – root for file tools (read_file, list_dir, run_command, write_file). Fallback: `CODEX_CWD`, then `process.cwd()`.
+- `RISKY_WORKSPACE_MODE` – set to `true` (or `FILE_WORKSPACE_MODE=risky`) to allow broader workspace root.
+- `RISKY_WORKSPACE_ROOT` – optional explicit root for risky mode. Default: parent of safe workspace root.
 - `READ_FILE_MAX_BYTES` – max file size for read_file (default 524288).
 - `RUN_COMMAND_TIMEOUT_MS` – command timeout for run_command (default 60000).
 - `MAX_MULTI_ACT_STEPS` – max tool calls per run (default 10, cap 50). Set to 1 to disable multi-act.
@@ -50,6 +53,12 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 - **Inputs:** `path` (required), `content` (required).
 - **Safety:** Path within workspace. No writing outside. Create dirs if needed.
 - **Returns:** `{ success, error? }`
+
+### 4b. create_workspace
+- **Purpose:** Create a new project directory (for example `ernest-mail`) before writing code.
+- **Inputs:** `name` or `path`, optional `allowExisting`, `createReadme`, `readmeTitle`.
+- **Safety:** Path must remain under resolved file workspace root.
+- **Returns:** `{ success, created, path, workspaceRoot, riskyMode, error? }`
 
 ### 5. Multi-act loop
 - **Purpose:** Agent chains multiple tool calls in one run.
