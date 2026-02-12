@@ -186,7 +186,8 @@ export async function buildServer(options?: { logger?: boolean }) {
     // P3: Generate unique requestId per request to prevent collisions
     // Multiple requests from the same tenant should have different requestIds for proper audit traceability
     // Keep tenantId separate from requestId to avoid masking cross-request behavior in logs
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const runStartMs = Date.now();
+    const requestId = `req-${runStartMs}-${Math.random().toString(36).substring(7)}`;
     
     // Create scoped memory manager for tenant isolation
     // Use tenantId as scope if authenticated, otherwise use requestId
@@ -249,13 +250,22 @@ export async function buildServer(options?: { logger?: boolean }) {
     const result = await agent.runOnce();
 
     if (obsStore) {
+      const observationKeys = observation.state && typeof observation.state === 'object'
+        ? Object.keys(observation.state)
+        : [];
       obsStore.addRun({
         requestId,
         tenantId,
         timestamp: Date.now(),
         status: result.status,
         selectedGoalId: result.selectedGoalId,
-        error: result.error
+        error: result.error,
+        decision: result.decision,
+        actionResult: result.actionResult,
+        stateTrace: result.stateTrace,
+        observationSummary: observationKeys,
+        dryRunMode: result.dryRunMode,
+        durationMs: Date.now() - runStartMs
       });
     }
 

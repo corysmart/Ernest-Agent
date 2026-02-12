@@ -13,6 +13,12 @@ export interface RunEntry {
   status: 'completed' | 'idle' | 'dry_run' | 'error';
   selectedGoalId?: string;
   error?: string;
+  decision?: { actionType: string; actionPayload?: Record<string, unknown>; confidence?: number; reasoning?: string };
+  actionResult?: { success?: boolean; error?: string; skipped?: boolean };
+  stateTrace?: string[];
+  observationSummary?: string[];
+  dryRunMode?: 'with-llm' | 'without-llm';
+  durationMs?: number;
 }
 
 export interface AuditEventEntry {
@@ -42,6 +48,15 @@ export class ObservabilityStore {
     if (this.runs.length > this.maxRuns) {
       this.runs.pop();
     }
+    this.eventListeners.forEach((fn) =>
+      fn({
+        timestamp: entry.timestamp,
+        tenantId: entry.tenantId,
+        requestId: entry.requestId,
+        eventType: 'run_complete',
+        data: { ...entry } as Record<string, unknown>
+      })
+    );
   }
 
   addEvent(entry: AuditEventEntry): void {

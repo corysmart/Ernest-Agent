@@ -52,10 +52,9 @@ describe('Observability UI', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(Array.isArray(body)).toBe(true);
-      expect(body.every((d: { id: string; title: string; path: string }) =>
-        typeof d.id === 'string' && typeof d.title === 'string' && typeof d.path === 'string'
+      expect(body.every((d: { id: string; title: string }) =>
+        typeof d.id === 'string' && typeof d.title === 'string'
       )).toBe(true);
-      expect(body.every((d: { path: string }) => d.path.toLowerCase().endsWith('.md'))).toBe(true);
 
       await server.close();
     });
@@ -74,6 +73,18 @@ describe('Observability UI', () => {
 
       const res = await server.inject({ method: 'GET', url: '/ui/docs/..%2F..%2Fetc%2Fpasswd' });
       expect([400, 404]).toContain(res.statusCode);
+
+      await server.close();
+    });
+
+    it('allows /ui routes without auth when OBS_UI_ENABLED and API_KEY set', async () => {
+      process.env.OBS_UI_ENABLED = 'true';
+      process.env.API_KEY = 'secret';
+
+      const server = await buildServer({ logger: false });
+
+      const res = await server.inject({ method: 'GET', url: '/ui/runs' });
+      expect(res.statusCode).toBe(200);
 
       await server.close();
     });

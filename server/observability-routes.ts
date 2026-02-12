@@ -34,6 +34,10 @@ export async function registerObservabilityRoutes(
       done();
       return;
     }
+    if (isUiEnabled()) {
+      done();
+      return;
+    }
     const authHeader = request.headers.authorization;
     if (!authHeader) {
       reply.code(401).send({ error: 'Authentication required' });

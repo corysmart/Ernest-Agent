@@ -25,7 +25,6 @@ interface AuditEventEntry {
 interface DocEntry {
   id: string;
   title: string;
-  path: string;
 }
 
 type Tab = 'runs' | 'events' | 'docs';

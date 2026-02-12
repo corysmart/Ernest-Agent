@@ -14,6 +14,11 @@ export interface DocEntry {
   path: string;
 }
 
+export interface DocListItem {
+  id: string;
+  title: string;
+}
+
 const DEFAULT_ROOTS = ['README.md', 'docs/'];
 const CACHE_TTL_MS = 10_000;
 
@@ -74,7 +79,7 @@ function getRoots(): string[] {
   return DEFAULT_ROOTS;
 }
 
-export function listDocs(baseDir: string): DocEntry[] {
+function getDocEntries(baseDir: string): DocEntry[] {
   const now = Date.now();
   if (cachedDocs !== null && now - cacheTimestamp < CACHE_TTL_MS) {
     return cachedDocs;
@@ -83,7 +88,9 @@ export function listDocs(baseDir: string): DocEntry[] {
   const all: DocEntry[] = [];
   const seen = new Set<string>();
   for (const root of roots) {
-    const expanded = expandPath(resolve(baseDir, root));
+    const expanded = root.trim().startsWith('~/')
+      ? expandPath(root)
+      : resolve(baseDir, root);
     const entries = collectMdFiles(expanded, baseDir);
     for (const e of entries) {
       if (!seen.has(e.id)) {
@@ -98,8 +105,12 @@ export function listDocs(baseDir: string): DocEntry[] {
   return all;
 }
 
+export function listDocs(baseDir: string): DocListItem[] {
+  return getDocEntries(baseDir).map((d) => ({ id: d.id, title: d.title }));
+}
+
 export function getDocContent(baseDir: string, id: string): string {
-  const docs = listDocs(baseDir);
+  const docs = getDocEntries(baseDir);
   const doc = docs.find((d) => d.id === id);
   if (!doc) {
     throw new Error('Doc not found');
