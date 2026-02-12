@@ -524,6 +524,21 @@ describe('AgentRuntime', () => {
     })).toThrow(/runTimeoutGraceMs/);
   });
 
+  it('rejects invalid tenantIdleEvictionMs in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      tenantIdleEvictionMs: -1
+    })).toThrow(/tenantIdleEvictionMs/);
+
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      tenantIdleEvictionMs: NaN
+    })).toThrow(/tenantIdleEvictionMs/);
+  });
+
   it('rejects invalid runTimeoutChargeTokens in constructor', () => {
     const provider = createRunProvider();
     expect(() => new AgentRuntime({
@@ -602,6 +617,36 @@ describe('AgentRuntime', () => {
     runtime.emitEvent('t1');
     await jest.advanceTimersByTimeAsync(100);
     expect(runCount).toBeLessThanOrEqual(3);
+    runtime.stop();
+  });
+
+  it('charges 0 tokens when provider rejects within grace period after timeout', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce(context) {
+        runCount++;
+        await new Promise<void>((_, reject) => {
+          context.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+        });
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 200 }]]),
+      runTimeoutMs: 30,
+      runTimeoutGraceMs: 100,
+      runTimeoutChargeTokens: 500
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(150);
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(150);
+    expect(runCount).toBe(2);
     runtime.stop();
   });
 

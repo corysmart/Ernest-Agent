@@ -95,6 +95,15 @@ export class AgentRuntime {
       );
     }
 
+    if (options.tenantIdleEvictionMs !== undefined) {
+      const ttl = Math.floor(Number(options.tenantIdleEvictionMs));
+      if (!Number.isFinite(ttl) || ttl < 0) {
+        throw new Error(
+          `tenantIdleEvictionMs must be a finite non-negative number. Got: ${options.tenantIdleEvictionMs}`
+        );
+      }
+    }
+
     this.options = {
       ...options,
       getTime: options.getTime ?? (() => Date.now()),
@@ -148,6 +157,7 @@ export class AgentRuntime {
     if (!this.running) {
       return;
     }
+    this.touchTenant(tenantId);
     this.eventQueue = this.eventQueue.filter((id) => id !== tenantId);
     while (this.eventQueue.length >= this.options.maxEventQueueSize) {
       this.eventQueue.shift();
@@ -285,22 +295,31 @@ export class AgentRuntime {
       });
 
       if (timedOut) {
-        const gracePromise = new Promise<{ result: AgentLoopResult; tokensUsed?: number } | null>((resolve) => {
-          const tid = globalThis.setTimeout(() => resolve(null), this.options.runTimeoutGraceMs);
+        type GraceResult =
+          | { ok: true; tokensUsed: number }
+          | { ok: false; providerReturned: true }
+          | { ok: false; providerReturned: false };
+        const gracePromise = new Promise<GraceResult>((resolve) => {
+          const tid = globalThis.setTimeout(
+            () => resolve({ ok: false, providerReturned: false }),
+            this.options.runTimeoutGraceMs
+          );
           runPromise
             .then((r) => {
               clearTimeout(tid);
-              resolve(r);
+              resolve({ ok: true, tokensUsed: r.tokensUsed ?? 0 });
             })
             .catch(() => {
               clearTimeout(tid);
-              resolve(null);
+              resolve({ ok: false, providerReturned: true });
             });
         });
 
-        const lateResult = await gracePromise;
-        if (lateResult) {
-          this.recordRun(tenantId, now, lateResult.tokensUsed ?? 0);
+        const graceResult = await gracePromise;
+        if (graceResult.ok) {
+          this.recordRun(tenantId, now, graceResult.tokensUsed);
+        } else if (graceResult.providerReturned) {
+          this.recordRun(tenantId, now, 0);
         } else {
           this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
         }
