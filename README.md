@@ -188,8 +188,7 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 1. Hardened environment tool registry with granular policies
 2. Expanded vector backend support and indexing options
 3. More advanced planning strategies and long-horizon optimization
-4. Observability and audit logs for agent decisions
-5. Additional integration tests and adversarial test suites
+4. Additional integration tests and adversarial test suites
 
 Development is iterative and test-driven; no unsafe “quick demos” are prioritized over correctness.
 
