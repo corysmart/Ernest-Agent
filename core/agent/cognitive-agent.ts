@@ -132,13 +132,15 @@ export class CognitiveAgent {
         };
       } else {
       transition('query_llm');
+      const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
       const systemPrompt = buildSystemPrompt({
         memoryContext,
         worldState,
         selfSnapshot,
         goal,
         plan, // Include plan in system prompt
-        promptFilter: this.options.promptFilter // Pass prompt filter for sanitization
+        promptFilter: this.options.promptFilter, // Pass prompt filter for sanitization
+        allowedActionTypes: allowedTypes ?? undefined
       });
       const userPrompt = sanitized.sanitized;
 
@@ -301,6 +303,7 @@ function buildSystemPrompt(args: {
   goal: { title: string; description?: string };
   plan?: { steps: Array<{ description: string }> };
   promptFilter: PromptInjectionFilter;
+  allowedActionTypes?: string[];
 }): string {
   // P2: Sanitize goal/memory content before including in system prompt
   // This prevents prompt injection via user-supplied goals or poisoned memory
@@ -309,11 +312,15 @@ function buildSystemPrompt(args: {
   const sanitizedMemoryContext = args.memoryContext ? args.promptFilter.sanitize(args.memoryContext).sanitized : '';
 
   const parts = [
-    'You are an agent that must output a JSON object with keys: actionType, actionPayload, confidence, reasoning.',
+    'You are an agent. Your response must be ONLY a valid JSON object—no other text, no markdown, no explanation. The system parses your output with JSON.parse(); any non-JSON text will cause a failure.',
     `Goal: ${sanitizedGoalTitle}${sanitizedGoalDesc ? ` - ${sanitizedGoalDesc}` : ''}`,
     `WorldState: ${JSON.stringify(args.worldState)}`,
     `SelfModel: ${JSON.stringify(args.selfSnapshot)}`
   ];
+
+  if (args.allowedActionTypes && args.allowedActionTypes.length > 0) {
+    parts.push(`actionType must be exactly one of: ${args.allowedActionTypes.join(', ')}.`);
+  }
 
   // Include plan if available
   if (args.plan && args.plan.steps && args.plan.steps.length > 0) {
@@ -325,6 +332,11 @@ function buildSystemPrompt(args: {
   if (sanitizedMemoryContext) {
     parts.push(`Memory:\n${sanitizedMemoryContext}`);
   }
+
+  parts.push(
+    'Response format: {"actionType":"<one of allowed types>","actionPayload":{},"confidence":<0-1>,"reasoning":"<optional>"}',
+    'Output ONLY the JSON object. Nothing before it, nothing after.'
+  );
 
   return parts.join('\n');
 }

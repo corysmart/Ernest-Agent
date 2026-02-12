@@ -10,4 +10,6 @@ export interface OutputValidator<T> {
 
 export interface ToolPermissionGate {
   isAllowed(action: AgentAction, context?: { goalId?: string }): { allowed: boolean; reason?: string };
+  /** When an allowlist is used, returns allowed action types for prompt constraints. */
+  getAllowedTypes?(): string[] | null;
 }

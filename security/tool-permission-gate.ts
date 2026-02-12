@@ -73,4 +73,8 @@ export class ToolPermissionGate {
 
     return { allowed: true };
   }
+
+  getAllowedTypes(): string[] | null {
+    return this.allow ? Array.from(this.allow) : null;
+  }
 }

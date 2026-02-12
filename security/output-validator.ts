@@ -1,6 +1,31 @@
 import type { ZodSchema } from 'zod';
 import { assertSafeObject } from './validation';
 
+/**
+ * Extracts JSON object string from common LLM response patterns:
+ * - Markdown code block (```json ... ``` or ``` ... ```)
+ * - First balanced { ... } in the string
+ */
+function extractJsonFromLlmOutput(text: string): string | null {
+  const trimmed = text.trim();
+  const codeBlock = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) {
+    return codeBlock[1]!.trim();
+  }
+  const braceStart = trimmed.indexOf('{');
+  if (braceStart < 0) return null;
+  let depth = 0;
+  for (let i = braceStart; i < trimmed.length; i += 1) {
+    const c = trimmed[i];
+    if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return trimmed.slice(braceStart, i + 1);
+    }
+  }
+  return null;
+}
+
 export class ZodOutputValidator<T> {
   private readonly schema: ZodSchema<T>;
   private readonly maxOutputLength: number;
@@ -20,8 +45,38 @@ export class ZodOutputValidator<T> {
     let parsed: unknown;
     try {
       parsed = JSON.parse(output);
-    } catch (error) {
-      return { success: false, errors: ['Invalid JSON output'] };
+    } catch {
+      // Raw output not valid JSON; try to extract from markdown or embedded object
+      const extracted = extractJsonFromLlmOutput(output);
+      if (!extracted) {
+        return { success: false, errors: ['Invalid JSON output'] };
+      }
+      try {
+        parsed = JSON.parse(extracted);
+      } catch {
+        return { success: false, errors: ['Invalid JSON output'] };
+      }
+    }
+
+    // Handle double-encoded: model returned a JSON string containing the object
+    if (typeof parsed === 'string' && parsed.trim().startsWith('{')) {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {
+        return { success: false, errors: ['Invalid JSON output'] };
+      }
+    }
+
+    // Extract from markdown code block if parsed is still a string
+    if (typeof parsed === 'string') {
+      const extracted = extractJsonFromLlmOutput(parsed);
+      if (extracted) {
+        try {
+          parsed = JSON.parse(extracted);
+        } catch {
+          return { success: false, errors: ['Invalid JSON output'] };
+        }
+      }
     }
 
     // P2: Validate parsed output for unsafe keys and depth before schema validation
