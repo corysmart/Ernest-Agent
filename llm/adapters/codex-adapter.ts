@@ -11,6 +11,7 @@ import { spawn } from 'child_process';
 import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { killOnAbort, KILL_GRACE_MS } from '../../tools/cli-kill';
 import {
   countApproxTokens,
   DEFAULT_MAX_TOKENS,
@@ -115,6 +116,8 @@ export class CodexLLMAdapter implements LLMAdapter {
         stdio: [fd, 'pipe', 'pipe'],
         signal: controller.signal
       });
+
+      killOnAbort(proc, controller.signal, KILL_GRACE_MS);
 
       proc.stdout?.on('data', (chunk: Buffer) => {
         stdout += chunk.toString();

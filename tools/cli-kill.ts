@@ -6,7 +6,10 @@
 
 import type { ChildProcess } from 'child_process';
 
-const DEFAULT_GRACE_MS = 3000;
+/** Grace period before SIGKILL after SIGTERM. Used by tools and sandboxed runner. */
+export const KILL_GRACE_MS = 3000;
+
+const DEFAULT_GRACE_MS = KILL_GRACE_MS;
 
 /**
  * Listens for abort signal and forcefully terminates the child process:

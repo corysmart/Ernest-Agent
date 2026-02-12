@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { toolRegistry } from '../tools/registry';
+import { KILL_GRACE_MS } from '../tools/cli-kill';
 
 /**
  * P3: Validates that a value is structured-clone compatible (can be sent via postMessage).
@@ -281,7 +282,7 @@ export class SandboxedToolRunner {
           completed = true;
           clearTimeout(timeoutId);
           worker.postMessage({ type: 'abort', requestId });
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, KILL_GRACE_MS + 500));
           worker.terminate();
           reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
         }
