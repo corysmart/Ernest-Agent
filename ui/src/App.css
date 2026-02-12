@@ -1,0 +1,196 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.app-header h1 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.25rem;
+}
+
+.tab-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.tab-row button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #555;
+  background: #222;
+  color: #eee;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.tab-row button:hover {
+  background: #333;
+}
+
+.tab-row button.active {
+  background: #444;
+  border-color: #666;
+}
+
+.clear-btn {
+  margin-left: auto;
+}
+
+.app-main {
+  flex: 1;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.panel {
+  max-width: 1200px;
+}
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.runs-table th,
+.runs-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.runs-table th {
+  background: #2a2a2a;
+  font-weight: 600;
+}
+
+.events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.events-list li {
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a1a;
+}
+
+.event-time {
+  font-size: 0.75rem;
+  color: #888;
+  margin-right: 0.5rem;
+}
+
+.event-type {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.events-list pre {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  background: #1a3a1a;
+  color: #6f6;
+  border-radius: 2px;
+  margin-bottom: 0.5rem;
+}
+
+.badge.off {
+  background: #3a1a1a;
+  color: #f66;
+}
+
+.docs-panel {
+  display: flex;
+  gap: 1rem;
+  height: calc(100vh - 12rem);
+}
+
+.docs-list {
+  width: 220px;
+  flex-shrink: 0;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+.docs-list button {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.25rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.docs-list button:hover {
+  background: #333;
+}
+
+.docs-list button.active {
+  background: #444;
+  color: #fff;
+}
+
+.docs-viewer {
+  flex: 1;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-y: auto;
+  background: #111;
+}
+
+.markdown-body {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-body pre,
+.markdown-body code {
+  background: #222;
+  padding: 0.2rem 0.4rem;
+  border-radius: 2px;
+  font-size: 0.85em;
+}
+
+.markdown-body pre {
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}

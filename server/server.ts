@@ -11,6 +11,9 @@ import { HeuristicPlanner } from '../goals/planner';
 import type { MemoryManager } from '../memory/memory-manager';
 import { ScopedMemoryManager } from '../memory/scoped-memory-manager';
 import { StructuredAuditLogger } from '../security/audit-logger';
+import { ObservabilityStore } from './observability-store';
+import { createObservabilityAuditLogger } from './observability-audit-forwarder';
+import { registerObservabilityRoutes } from './observability-routes';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/security';
 import type { AgentDecision } from '../core/contracts/agent';
@@ -117,6 +120,16 @@ export async function buildServer(options?: { logger?: boolean }) {
     done();
   });
 
+  const obsUiEnabled = process.env.OBS_UI_ENABLED === 'true' || process.env.OBS_UI_ENABLED === '1'
+    || (process.env.OBS_UI_ENABLED === undefined && (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev'));
+  const obsStore = obsUiEnabled ? new ObservabilityStore() : null;
+  if (obsStore) {
+    await registerObservabilityRoutes(fastify, obsStore);
+  } else {
+    fastify.get('/ui', async (_req, reply) => { reply.code(404).send({ error: 'UI disabled' }); });
+    fastify.get('/ui/*', async (_req, reply) => { reply.code(404).send({ error: 'UI disabled' }); });
+  }
+
   fastify.get('/health', async () => ({ status: 'ok' }));
 
   fastify.post('/agent/run-once', async (request, reply) => {
@@ -182,8 +195,9 @@ export async function buildServer(options?: { logger?: boolean }) {
     const persistMemory = Boolean(tenantId); // Persist memory only for authenticated tenants
     const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, memoryScope, persistMemory);
     
-    // Create audit logger for this request
-    const auditLogger = new StructuredAuditLogger();
+    // Create audit logger for this request (forward to obs store when UI enabled)
+    const baseLogger = obsStore ? createObservabilityAuditLogger(obsStore) : undefined;
+    const auditLogger = new StructuredAuditLogger(baseLogger);
     
     // Create scoped goal stack for tenant isolation (already per-request)
     const goalStack = new GoalStack();
@@ -234,6 +248,17 @@ export async function buildServer(options?: { logger?: boolean }) {
 
     const result = await agent.runOnce();
 
+    if (obsStore) {
+      obsStore.addRun({
+        requestId,
+        tenantId,
+        timestamp: Date.now(),
+        status: result.status,
+        selectedGoalId: result.selectedGoalId,
+        error: result.error
+      });
+    }
+
     // Return appropriate HTTP status codes based on agent result
     if (result.status === 'error') {
       // Client errors (4xx) vs server errors (5xx) based on error type
@@ -274,9 +299,11 @@ if (require.main === module) {
     }
     const port = portRaw;
     
-    // P3: Await and error-handle fastify.listen to prevent unhandled rejections
+    const obsEnabled = process.env.OBS_UI_ENABLED === 'true' || process.env.OBS_UI_ENABLED === '1'
+      || (process.env.OBS_UI_ENABLED === undefined && (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev'));
+    const host = obsEnabled && process.env.OBS_UI_BIND_LOCALHOST !== 'false' ? '127.0.0.1' : '0.0.0.0';
     try {
-      await fastify.listen({ port, host: '0.0.0.0' });
+      await fastify.listen({ port, host });
       console.log(`Server listening on port ${port}`);
     } catch (error) {
       console.error(`[ERROR] Failed to start server on port ${port}:`, error);

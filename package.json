@@ -18,7 +18,10 @@
     "curl:run-goal": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-goal.json",
     "curl:run-dry-with-llm": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-dry-with-llm.json",
     "curl:run-dry-with-llm-goal": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-dry-with-llm-goal.json",
-    "curl:run-dry-without-llm": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-dry-without-llm.json"
+    "curl:run-dry-without-llm": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-dry-without-llm.json",
+    "ui:dev": "npm run dev --prefix ui",
+    "ui:build": "npm run build --prefix ui",
+    "dev:ui": "npm run build && concurrently \"npm run dev\" \"npm run ui:dev\""
   },
   "dependencies": {
     "fastify": "^5.7.4",
@@ -33,6 +36,7 @@
     "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "^7.12.0",
     "@typescript-eslint/parser": "^7.12.0",
+    "concurrently": "^9.2.1",
     "eslint": "^8.57.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-airbnb-typescript": "^18.0.0",

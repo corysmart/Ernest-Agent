@@ -163,6 +163,7 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 - **CLI tools**: `invoke_codex` and `invoke_claude` for running Codex and Claude Code from the terminal using your existing subscriptions ([tools/README.md](tools/README.md))
 - **Dry run**: `dryRun: 'with-llm'` or `'without-llm'` to preview decisions without executing tools or updating state
 - **Auto-respond**: When `AUTO_RESPOND=true` (env) or `autoRespond: true` (request body), the server injects a default "Respond to user" goal when a `user_message` exists and no explicit goal is provided. Disabled by default; the agent remains idle unless auto-respond is explicitly enabled.
+- **Observability UI**: Local dashboard at `/ui` when `OBS_UI_ENABLED=true` (default in dev). Tabs for Runs, Audit Events (SSE), and Docs/Markdown viewer. Uses `marked` and `dompurify` for safe markdown rendering. Binds to localhost by default when enabled.
 
 **Planned / next milestones:**
 
