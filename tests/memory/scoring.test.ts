@@ -1,4 +1,4 @@
-import { cosineSimilarity, goalRelevanceScore, timeDecayScore } from '../../memory/scoring';
+import { aggregateScore, cosineSimilarity, goalRelevanceScore, timeDecayScore } from '../../memory/scoring';
 
 describe('memory scoring', () => {
   it('calculates cosine similarity', () => {
@@ -25,5 +25,28 @@ describe('memory scoring', () => {
 
   it('rejects invalid decay configuration', () => {
     expect(() => timeDecayScore(Date.now(), Date.now(), 0)).toThrow('Half-life must be positive');
+  });
+
+  it('cosineSimilarity returns 0 when denominator is 0', () => {
+    const score = cosineSimilarity([0, 0], [0, 0]);
+    expect(score).toBe(0);
+  });
+
+  it('cosineSimilarity uses provided norms', () => {
+    const score = cosineSimilarity([1, 0], [1, 0], 1, 1);
+    expect(score).toBeCloseTo(1);
+  });
+
+  it('goalRelevanceScore returns 0 for empty text', () => {
+    expect(goalRelevanceScore('', [{ id: 'g1', title: 'Deploy', description: 'desc' }])).toBe(0);
+  });
+
+  it('goalRelevanceScore returns 0 for empty goals', () => {
+    expect(goalRelevanceScore('deploy service', [])).toBe(0);
+  });
+
+  it('aggregateScore accepts custom weights', () => {
+    const score = aggregateScore(0.5, 0.5, 0.5, { similarity: 1, decay: 0, relevance: 0 });
+    expect(score).toBe(0.5);
   });
 });

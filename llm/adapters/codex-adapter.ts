@@ -8,7 +8,7 @@
  */
 
 import { spawn } from 'child_process';
-import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { killOnAbort, KILL_GRACE_MS } from '../../tools/cli-kill';
@@ -93,7 +93,7 @@ export class CodexLLMAdapter implements LLMAdapter {
       fd = openSync(promptPath, 'r');
     } catch (err) {
       try {
-        rmdirSync(tmpDir, { recursive: true });
+        rmSync(tmpDir, { recursive: true });
       } catch {
         /* ignore */
       }
@@ -131,7 +131,7 @@ export class CodexLLMAdapter implements LLMAdapter {
         clearTimeout(timeoutId);
         try {
           closeSync(fd);
-          rmdirSync(tmpDir, { recursive: true });
+          rmSync(tmpDir, { recursive: true });
         } catch {
           /* ignore */
         }

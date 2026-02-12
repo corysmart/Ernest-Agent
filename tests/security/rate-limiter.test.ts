@@ -17,6 +17,19 @@ describe('RateLimiter', () => {
     expect(limiter.consume('agent', 1)).toBe(true);
   });
 
+  it('consume with 0 tokens returns true', () => {
+    const limiter = new RateLimiter({ capacity: 1, refillPerSecond: 0 });
+    expect(limiter.consume('agent', 0)).toBe(true);
+  });
+
+  it('rejects zero capacity', () => {
+    expect(() => new RateLimiter({ capacity: 0, refillPerSecond: 1 })).toThrow('Capacity must be positive');
+  });
+
+  it('rejects negative refill rate', () => {
+    expect(() => new RateLimiter({ capacity: 1, refillPerSecond: -1 })).toThrow('Refill rate must be non-negative');
+  });
+
   describe('P3: Bucket eviction', () => {
     it('evicts buckets older than TTL', () => {
       const limiter = new RateLimiter({

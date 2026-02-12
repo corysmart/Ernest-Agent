@@ -10,7 +10,7 @@
  */
 
 import { spawn } from 'child_process';
-import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir, homedir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
@@ -46,7 +46,7 @@ export const invokeCodex: ToolHandler = async (
     fd = openSync(promptPath, 'r');
   } catch (err) {
     try {
-      rmdirSync(tmpDir, { recursive: true });
+      rmSync(tmpDir, { recursive: true });
     } catch {
       /* ignore */
     }
@@ -83,7 +83,7 @@ export const invokeCodex: ToolHandler = async (
     const cleanup = () => {
       try {
         closeSync(fd);
-        rmdirSync(tmpDir, { recursive: true });
+        rmSync(tmpDir, { recursive: true });
       } catch {
         /* ignore */
       }

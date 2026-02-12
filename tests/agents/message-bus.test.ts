@@ -43,6 +43,42 @@ describe('InMemoryMessageBus', () => {
     expect(received).toEqual([]);
   });
 
+  it('publish to non-subscribed agent does nothing', async () => {
+    const bus = new InMemoryMessageBus();
+    await expect(
+      bus.publish({ id: 'm1', from: 'a', to: 'nonexistent', type: 'task', payload: {}, timestamp: Date.now() })
+    ).resolves.not.toThrow();
+  });
+
+  it('publish with undefined payload', async () => {
+    const bus = new InMemoryMessageBus();
+    const received: unknown[] = [];
+    bus.subscribe('a', (m) => received.push(m.payload));
+    await bus.publish({ id: 'm1', from: 'b', to: 'a', type: 'info', payload: {}, timestamp: Date.now() });
+    expect(received[0]).toEqual({});
+  });
+
+  it('handler throws is isolated, other handlers still run', async () => {
+    const bus = new InMemoryMessageBus();
+    const received: string[] = [];
+    bus.subscribe('a', () => {
+      throw new Error('handler1 failed');
+    });
+    bus.subscribe('a', (m) => received.push(m.type));
+    await bus.publish({ id: 'm1', from: 'b', to: 'a', type: 'task', payload: {}, timestamp: Date.now() });
+    expect(received).toEqual(['task']);
+  });
+
+  it('throws when all handlers fail', async () => {
+    const bus = new InMemoryMessageBus();
+    bus.subscribe('a', () => {
+      throw new Error('fail');
+    });
+    await expect(
+      bus.publish({ id: 'm1', from: 'b', to: 'a', type: 'task', payload: {}, timestamp: Date.now() })
+    ).rejects.toThrow('All handlers failed');
+  });
+
   it('P3: clones messages to prevent mutation by handlers', async () => {
     const bus = new InMemoryMessageBus();
     const originalPayload: Record<string, unknown> = { value: 'original' };

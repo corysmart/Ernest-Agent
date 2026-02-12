@@ -20,6 +20,17 @@ describe('CompositeObservationAdapter', () => {
     expect(obs).toEqual({});
   });
 
+  it('handles non-Error thrown by adapter', async () => {
+    const badAdapter: ObservationAdapter = {
+      async getObservations() {
+        throw 'string error';
+      }
+    };
+    const composite = new CompositeObservationAdapter([badAdapter]);
+    const obs = await composite.getObservations();
+    expect(obs).toEqual({});
+  });
+
   it('continues when one adapter throws', async () => {
     const okAdapter = new StaticObservationAdapter({ a: '1' });
     const badAdapter: ObservationAdapter = {

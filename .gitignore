@@ -38,3 +38,7 @@ logs/
 # Observability UI persisted data
 data/
 
+# OpenClaw workspace (if installed into repo - contains user data)
+workspace/
+.openclaw-workspace/
+
