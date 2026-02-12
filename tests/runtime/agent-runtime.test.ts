@@ -523,14 +523,14 @@ describe('AgentRuntime', () => {
     })).toThrow(/runTimeoutMs/);
   });
 
-  it('records failure and releases lock on run timeout', async () => {
+  it('records failure and keeps lock until run completes on timeout', async () => {
     let runCount = 0;
     const logged: string[] = [];
     const provider: RunProvider = {
       async runOnce() {
         runCount++;
         if (runCount === 1) {
-          await new Promise(() => {});
+          await new Promise((r) => setTimeout(r, 150));
         }
         return { result: { status: 'completed' }, tokensUsed: 100 };
       }
@@ -578,6 +578,28 @@ describe('AgentRuntime', () => {
 
     await jest.advanceTimersByTimeAsync(100);
     expect(runCount).toBeLessThanOrEqual(2);
+    runtime.stop();
+  });
+
+  it('evictIdleTenants runs on every getTenantState and respects in-flight runs', async () => {
+    const provider = createRunProvider();
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([
+        ['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }],
+        ['t2', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]
+      ]),
+      tenantIdleEvictionMs: 50,
+      getTime: () => 1000
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t2');
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(provider.runCount).toBeGreaterThanOrEqual(1);
     runtime.stop();
   });
 

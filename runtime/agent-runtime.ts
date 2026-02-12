@@ -43,6 +43,7 @@ export class AgentRuntime {
   private readonly tenantStates = new Map<string, TenantState>();
   private readonly tenantLocks = new Map<string, Promise<void>>();
   private readonly pendingHeartbeatRuns = new Set<string>();
+  private readonly inFlightRuns = new Set<string>();
   private readonly tenantLastActivityAt = new Map<string, number>();
   private eventQueue: string[] = [];
   private processingEvents = false;
@@ -173,7 +174,12 @@ export class AgentRuntime {
   }
 
   private async executeRun(tenantId: string): Promise<void> {
-    return this.withTenantLock(tenantId, () => this.doExecuteRun(tenantId));
+    this.inFlightRuns.add(tenantId);
+    try {
+      return await this.withTenantLock(tenantId, () => this.doExecuteRun(tenantId));
+    } finally {
+      this.inFlightRuns.delete(tenantId);
+    }
   }
 
   private async doExecuteRun(tenantId: string): Promise<void> {
@@ -234,6 +240,7 @@ export class AgentRuntime {
       this.logAudit(tenantId, runId, 'run_error', {
         error: error instanceof Error ? error.message : String(error)
       });
+      await runPromise.catch(() => {});
     }
   }
 
@@ -291,7 +298,7 @@ export class AgentRuntime {
     const now = this.options.getTime();
     const cutoff = now - ttl;
     for (const [id, at] of this.tenantLastActivityAt.entries()) {
-      if (at < cutoff && !this.pendingHeartbeatRuns.has(id)) {
+      if (at < cutoff && !this.inFlightRuns.has(id)) {
         this.tenantStates.delete(id);
         this.tenantLocks.delete(id);
         this.tenantLastActivityAt.delete(id);
@@ -301,9 +308,9 @@ export class AgentRuntime {
 
   private getTenantState(tenantId: string): TenantState {
     this.touchTenant(tenantId);
+    this.evictIdleTenants();
     let state = this.tenantStates.get(tenantId);
     if (!state) {
-      this.evictIdleTenants();
       state = {
         runTimestamps: [],
         tokenTimestamps: [],
