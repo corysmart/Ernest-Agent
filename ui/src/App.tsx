@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import './App.css';
@@ -12,6 +12,12 @@ interface RunEntry {
   status: string;
   selectedGoalId?: string;
   error?: string;
+  decision?: { actionType: string; actionPayload?: Record<string, unknown>; confidence?: number; reasoning?: string };
+  actionResult?: { success?: boolean; error?: string; skipped?: boolean };
+  stateTrace?: string[];
+  observationSummary?: string[];
+  dryRunMode?: 'with-llm' | 'without-llm';
+  durationMs?: number;
 }
 
 interface AuditEventEntry {
@@ -32,6 +38,7 @@ type Tab = 'runs' | 'events' | 'docs';
 function App() {
   const [tab, setTab] = useState<Tab>('runs');
   const [runs, setRuns] = useState<RunEntry[]>([]);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [events, setEvents] = useState<AuditEventEntry[]>([]);
   const [docs, setDocs] = useState<DocEntry[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
@@ -107,6 +114,12 @@ function App() {
       try {
         const entry = JSON.parse(e.data) as AuditEventEntry;
         setEvents((prev) => [entry, ...prev].slice(0, 500));
+        if (entry.eventType === 'run_complete' && entry.data && typeof entry.data === 'object') {
+          const run = entry.data as unknown as RunEntry;
+          if (run.requestId != null && run.timestamp != null) {
+            setRuns((prev) => [run, ...prev.filter((r) => r.requestId !== run.requestId)].slice(0, 100));
+          }
+        }
       } catch {
         /* ignore */
       }
@@ -132,25 +145,60 @@ function App() {
       <main className="app-main">
         {tab === 'runs' && (
           <div className="panel">
+            <button type="button" className="refresh-btn" onClick={fetchRuns}>Refresh</button>
             <table className="runs-table">
               <thead>
                 <tr>
+                  <th style={{ width: 24 }} />
                   <th>Request ID</th>
                   <th>Tenant</th>
                   <th>Time</th>
                   <th>Status</th>
                   <th>Goal</th>
+                  <th>Duration</th>
                 </tr>
               </thead>
               <tbody>
                 {runs.map((r) => (
-                  <tr key={r.requestId}>
-                    <td>{r.requestId}</td>
-                    <td>{r.tenantId ?? '-'}</td>
-                    <td>{new Date(r.timestamp).toISOString()}</td>
-                    <td>{r.status}</td>
-                    <td>{r.selectedGoalId ?? '-'}</td>
-                  </tr>
+                  <Fragment key={r.requestId}>
+                    <tr
+                      className={expandedRunId === r.requestId ? 'expanded' : ''}
+                      onClick={() => setExpandedRunId(expandedRunId === r.requestId ? null : r.requestId)}
+                    >
+                      <td>{expandedRunId === r.requestId ? '▼' : '▶'}</td>
+                      <td>{r.requestId}</td>
+                      <td>{r.tenantId ?? '-'}</td>
+                      <td>{new Date(r.timestamp).toISOString()}</td>
+                      <td>{r.status}</td>
+                      <td>{r.selectedGoalId ?? '-'}</td>
+                      <td>{r.durationMs != null ? `${r.durationMs}ms` : '-'}</td>
+                    </tr>
+                    {expandedRunId === r.requestId && (
+                      <tr key={`${r.requestId}-detail`} className="detail-row">
+                        <td colSpan={7}>
+                          <div className="run-details">
+                            {r.error && <p><strong>Error:</strong> {r.error}</p>}
+                            {r.decision && (
+                              <p><strong>Decision:</strong> <pre>{JSON.stringify(r.decision, null, 2)}</pre></p>
+                            )}
+                            {r.actionResult && (
+                              <p><strong>ActionResult:</strong> <pre>{JSON.stringify(r.actionResult, null, 2)}</pre></p>
+                            )}
+                            {r.dryRunMode && <p><strong>Dry run:</strong> {r.dryRunMode}</p>}
+                            {r.stateTrace && r.stateTrace.length > 0 && (
+                              <p><strong>State trace:</strong> <pre>{r.stateTrace.join('\n')}</pre></p>
+                            )}
+                            {r.observationSummary && r.observationSummary.length > 0 && (
+                              <p><strong>Observations:</strong> <pre>{r.observationSummary.join('\n')}</pre></p>
+                            )}
+                            {!r.error && !r.decision && !r.actionResult && !r.dryRunMode && !r.stateTrace?.length && !r.observationSummary?.length && (
+                              <p className="muted">No additional details</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

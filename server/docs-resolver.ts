@@ -109,6 +109,12 @@ export function listDocs(baseDir: string): DocListItem[] {
   return getDocEntries(baseDir).map((d) => ({ id: d.id, title: d.title }));
 }
 
+function isPathUnderRoot(filePath: string, rootPath: string): boolean {
+  const normalized = resolve(filePath);
+  const root = resolve(rootPath);
+  return normalized === root || normalized.startsWith(root + path.sep);
+}
+
 export function getDocContent(baseDir: string, id: string): string {
   const docs = getDocEntries(baseDir);
   const doc = docs.find((d) => d.id === id);
@@ -120,10 +126,23 @@ export function getDocContent(baseDir: string, id: string): string {
   }
   const base = resolve(baseDir);
   const relPath = path.relative(base, doc.path);
-  if (relPath.startsWith('..') || path.isAbsolute(relPath)) {
-    throw new Error('Path traversal detected');
+  const isOutsideBase = relPath.startsWith('..') || path.isAbsolute(relPath);
+  if (isOutsideBase) {
+    // Allow paths outside baseDir only if they are under an explicitly configured root
+    const roots = getRoots();
+    const underConfiguredRoot = roots.some((r) => {
+      const expanded = r.trim().startsWith('~/') ? expandPath(r) : resolve(baseDir, r);
+      return isPathUnderRoot(doc.path, expanded);
+    });
+    if (!underConfiguredRoot) {
+      throw new Error('Path traversal detected');
+    }
+    if (doc.path.includes('\0')) {
+      throw new Error('Invalid path');
+    }
+  } else {
+    assertSafePath(base, relPath || '.');
   }
-  assertSafePath(base, relPath || '.');
   return readFileSync(doc.path, 'utf-8');
 }
 
