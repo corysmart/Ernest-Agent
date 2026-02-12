@@ -333,10 +333,18 @@ export class AgentRuntime {
         } else {
           this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
         }
-        const maxHoldPromise = new Promise<void>((r) =>
-          globalThis.setTimeout(r, this.options.runTimeoutMaxLockHoldMs)
-        );
-        await Promise.race([runPromise.catch(() => {}), maxHoldPromise]);
+        let maxHoldId: ReturnType<typeof globalThis.setTimeout> | undefined;
+        const maxHoldPromise = new Promise<void>((r) => {
+          maxHoldId = globalThis.setTimeout(r, this.options.runTimeoutMaxLockHoldMs);
+        });
+        const runSettled = runPromise
+          .catch(() => {})
+          .finally(() => {
+            if (maxHoldId != null) {
+              clearTimeout(maxHoldId);
+            }
+          });
+        await Promise.race([runSettled, maxHoldPromise]);
       } else {
         const lateResult = await runPromise.catch(() => null);
         this.recordRun(tenantId, now, lateResult?.tokensUsed ?? 0);
