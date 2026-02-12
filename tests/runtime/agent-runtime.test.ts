@@ -318,4 +318,97 @@ describe('AgentRuntime', () => {
 
     runtime.stop();
   });
+
+  it('emitEvent after stop does not run', async () => {
+    const provider = createRunProvider();
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    runtime.stop();
+    runtime.emitEvent('t1');
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(provider.runCount).toBe(0);
+  });
+
+  it('thrown runs count toward budget', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        throw new Error('fail');
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 2, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    await jest.advanceTimersByTimeAsync(1000);
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(runCount).toBe(2);
+
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(runCount).toBe(2);
+
+    runtime.stop();
+  });
+
+  it('audit logger rejection does not crash or block run', async () => {
+    const provider = createRunProvider();
+    const auditLogger = {
+      logRuntimeEvent: () => Promise.reject(new Error('audit failed'))
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      auditLogger
+    });
+
+    runtime.start('t1');
+    await jest.advanceTimersByTimeAsync(1000);
+
+    expect(provider.runCount).toBe(1);
+
+    runtime.stop();
+  });
+
+  it('per-tenant serialization prevents budget bypass with concurrent runs', async () => {
+    let concurrency = 0;
+    let maxConcurrency = 0;
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        concurrency++;
+        maxConcurrency = Math.max(maxConcurrency, concurrency);
+        await new Promise((r) => setTimeout(r, 50));
+        concurrency--;
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 10,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 2, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+
+    await jest.advanceTimersByTimeAsync(200);
+    expect(maxConcurrency).toBe(1);
+    expect(runCount).toBe(2);
+
+    runtime.stop();
+  });
 });

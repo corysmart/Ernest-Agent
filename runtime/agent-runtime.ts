@@ -39,6 +39,7 @@ export class AgentRuntime {
 
   private heartbeatHandle: ReturnType<typeof setInterval> | null = null;
   private readonly tenantStates = new Map<string, TenantState>();
+  private readonly tenantLocks = new Map<string, Promise<void>>();
   private eventQueue: string[] = [];
   private processingEvents = false;
   private running = false;
@@ -84,31 +85,60 @@ export class AgentRuntime {
 
   /**
    * Emits an event to trigger an immediate run for the tenant.
+   * No-op when runtime is stopped.
    */
   emitEvent(tenantId: string): void {
+    if (!this.running) {
+      return;
+    }
     this.eventQueue.push(tenantId);
     void this.processEventQueue();
   }
 
   private async processEventQueue(): Promise<void> {
-    if (this.processingEvents || this.eventQueue.length === 0) {
+    if (!this.running || this.processingEvents || this.eventQueue.length === 0) {
       return;
     }
     this.processingEvents = true;
-    while (this.eventQueue.length > 0) {
+    while (this.running && this.eventQueue.length > 0) {
       const tenantId = this.eventQueue.shift();
       if (tenantId) {
         await this.executeRun(tenantId).catch(() => {});
       }
     }
+    if (!this.running) {
+      this.eventQueue.length = 0;
+    }
     this.processingEvents = false;
   }
 
   private scheduleRun(tenantId: string): void {
+    if (!this.running) {
+      return;
+    }
     this.executeRun(tenantId).catch(() => {});
   }
 
+  private async withTenantLock<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.tenantLocks.get(tenantId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.tenantLocks.set(tenantId, previous.then(() => current));
+    await previous;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   private async executeRun(tenantId: string): Promise<void> {
+    return this.withTenantLock(tenantId, () => this.doExecuteRun(tenantId));
+  }
+
+  private async doExecuteRun(tenantId: string): Promise<void> {
     const now = this.options.getTime();
 
     if (this.options.killSwitch?.enabled) {
@@ -148,6 +178,7 @@ export class AgentRuntime {
         tokensUsed: tokensUsed ?? 0
       });
     } catch (error) {
+      this.recordRun(tenantId, now, 0);
       this.recordFailure(tenantId, now);
       this.logAudit(tenantId, runId, 'run_error', {
         error: error instanceof Error ? error.message : String(error)
@@ -254,11 +285,14 @@ export class AgentRuntime {
     if (!logger) {
       return;
     }
-    logger.logRuntimeEvent({
-      tenantId,
-      runId: runId ?? '',
-      event,
-      data
-    });
+    const entry = { tenantId, runId: runId ?? '', event, data };
+    try {
+      const result = logger.logRuntimeEvent(entry);
+      if (result instanceof Promise || (result != null && typeof (result as { then?: unknown }).then === 'function')) {
+        void (result as Promise<void>).catch(() => {});
+      }
+    } catch {
+      // Best-effort: audit failures must not affect run flow or crash process
+    }
   }
 }
