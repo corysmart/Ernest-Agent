@@ -9,8 +9,9 @@ npm run test:coverage
 npm run lint
 ```
 
-- **npm test**: Runs Jest in band (single-threaded) for unit and integration tests.
+- **npm test**: Runs Jest in band (single-threaded) for unit, integration, and e2e tests.
 - **npm run test:coverage**: Same as `npm test` with coverage report. Enforces thresholds.
+- **npm run test:e2e**: Runs only e2e tests (real HTTP, mock LLM).
 - **npm run lint**: ESLint across TypeScript files.
 
 ## Test Categories
@@ -20,6 +21,7 @@ npm run lint
 | Unit | `tests/<module>/` | Isolated component behavior; mocked dependencies |
 | Integration | `tests/integration/` | Cross-module flows (planning loop, memory retrieval, world simulation) |
 | Security | `tests/security/` | Prompt injection, SSRF, path traversal, output validation, sandbox, rate limiting |
+| E2E | `tests/e2e/` | Real HTTP against live server; mock LLM; CI-safe, no external services |
 
 Tests are offline-safe where possible. DNS-dependent tests use mocks or explicit stubs to avoid network calls in CI.
 
@@ -57,3 +59,10 @@ jest.mock('child_process', () => ({
 ```
 
 Mock all imports for unit tests to keep them fast and deterministic.
+
+## E2E Tests
+
+`tests/e2e/` contains CI-safe end-to-end tests. They start a real HTTP server on an ephemeral port, issue real `fetch` requests, and use the mock LLM adapter. No external services (API keys, database, CLI tools) are required.
+
+- **Run with**: `npm test` (included) or `npm run test:e2e` (e2e only)
+- **Current scope**: Single durable test that validates the full stack (HTTP -> Fastify -> container -> agent -> response). Update only if the core API or architecture changes.
