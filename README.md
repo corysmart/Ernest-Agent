@@ -72,6 +72,7 @@ The system is secure by default and assumes adversarial inputs.
 - Security layer (validation, sandboxing, gating, SSRF/path protections)
 - Fastify API for one-shot agent execution
 - **Runtime**: `AgentRuntime` with heartbeat, `emitEvent()`, budget guardrails, circuit breaker, kill switch; `ObservationAdapter` and `ObservationNormalizer` for text-only observations
+- **CLI tools**: `invoke_codex` and `invoke_claude` for running Codex and Claude Code from the terminal using your existing subscriptions ([tools/README.md](tools/README.md))
 
 **Planned / next milestones:**
 

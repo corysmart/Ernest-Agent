@@ -13,6 +13,8 @@ describe('buildContainer embedding configuration', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_MODEL;
     delete process.env.OPENAI_EMBEDDING_MODEL;
+    delete process.env.LLM_PROVIDER;
+    delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_EMBEDDING_MODEL;
     delete process.env.ANTHROPIC_EMBEDDING_API_KEY;
     delete process.env.ANTHROPIC_EMBEDDING_BASE_URL;
@@ -30,6 +32,14 @@ describe('buildContainer embedding configuration', () => {
     process.env.ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 
     await expect(buildContainer()).rejects.toThrow('EMBEDDING_PROVIDER must be set');
+  });
+
+  it('uses Codex when no API keys are set', async () => {
+    const { CodexLLMAdapter } = await import('../../llm/adapters/codex-adapter');
+    const containerContext = await buildContainer();
+    const llmAdapter = containerContext.container.resolve<import('../../core/contracts/llm').LLMAdapter>('llmAdapter');
+    expect(llmAdapter).toBeInstanceOf(CodexLLMAdapter);
+    await containerContext.cleanup();
   });
 
   it('allows a separate embedding provider for Anthropic', async () => {

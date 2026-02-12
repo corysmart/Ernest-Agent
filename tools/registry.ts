@@ -14,6 +14,8 @@
 
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { pursueGoal } from './pursue-goal';
+import { invokeCodex } from './invoke-codex';
+import { invokeClaude } from './invoke-claude';
 
 export interface ToolDefinition {
   name: string;
@@ -111,6 +113,18 @@ export function initializeToolRegistry(): void {
     name: 'pursue_goal',
     handler: pursueGoal,
     description: 'Pursue a goal with the given input'
+  });
+
+  toolRegistry.register({
+    name: 'invoke_codex',
+    handler: invokeCodex,
+    description: 'Run OpenAI Codex CLI with a prompt. Uses ChatGPT subscription.'
+  });
+
+  toolRegistry.register({
+    name: 'invoke_claude',
+    handler: invokeClaude,
+    description: 'Run Claude Code CLI with a prompt. Uses Pro/Max/Teams subscription.'
   });
 
   // Add more tools here as they are created

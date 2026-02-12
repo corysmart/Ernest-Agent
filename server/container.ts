@@ -16,6 +16,7 @@ import { MockLLMAdapter } from '../llm/mock-adapter';
 import { OpenAIAdapter } from '../llm/adapters/openai-adapter';
 import { AnthropicAdapter } from '../llm/adapters/anthropic-adapter';
 import { LocalLLMAdapter } from '../llm/adapters/local-adapter';
+import { CodexLLMAdapter } from '../llm/adapters/codex-adapter';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { EmbeddingProvider } from '../memory/memory-manager';
 
@@ -231,7 +232,9 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
     useWorkerThreads, // P2: Secure-by-default: enabled in production, opt-in elsewhere
     requireIsolation: process.env.NODE_ENV === 'production' // P2: Require isolation in production
   });
-  const permissionGate = new ToolPermissionGate({ allow: ['pursue_goal'] });
+  const permissionGate = new ToolPermissionGate({
+    allow: ['pursue_goal', 'invoke_codex', 'invoke_claude']
+  });
 
   container.registerValue('vectorStore', vectorStore);
   container.registerValue('memoryRepository', memoryRepository);
@@ -285,9 +288,27 @@ async function buildMemoryRepository(): Promise<{ repository: InMemoryMemoryRepo
   return { repository: new InMemoryMemoryRepository() };
 }
 
+function inferLlmProvider(): string {
+  const explicit = process.env.LLM_PROVIDER;
+  if (explicit) {
+    return explicit.toLowerCase();
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return 'openai';
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return 'anthropic';
+  }
+  return 'codex';
+}
+
 async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLMAdapter> {
-  const provider = (process.env.LLM_PROVIDER ?? 'mock').toLowerCase();
+  const provider = inferLlmProvider();
   const resolveDns = options.resolveDns ?? (process.env.SSRF_RESOLVE_DNS === 'false' ? false : true);
+
+  if (provider === 'codex') {
+    return new CodexLLMAdapter({ cwd: process.cwd() });
+  }
 
   if (provider === 'openai') {
     const apiKey = requireEnv('OPENAI_API_KEY');
@@ -339,9 +360,14 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
     return await LocalLLMAdapter.create({ baseUrl, allowlist, resolveDns });
   }
 
-  return new MockLLMAdapter({
-    response: process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}'
-  });
+  if (provider === 'mock') {
+    return new MockLLMAdapter({
+      response:
+        process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}'
+    });
+  }
+
+  throw new Error(`Unsupported LLM_PROVIDER: ${provider}`);
 }
 
 async function buildEmbeddingProvider(llmAdapter: LLMAdapter, options: BuildContainerOptions = {}): Promise<EmbeddingProvider> {
@@ -349,7 +375,7 @@ async function buildEmbeddingProvider(llmAdapter: LLMAdapter, options: BuildCont
   const resolveDns = options.resolveDns ?? (process.env.SSRF_RESOLVE_DNS === 'false' ? false : true);
 
   if (provider === 'llm') {
-    if ((process.env.LLM_PROVIDER ?? 'mock').toLowerCase() === 'anthropic') {
+    if (inferLlmProvider() === 'anthropic') {
       const hasAnthropicEmbedding = Boolean(process.env.ANTHROPIC_EMBEDDING_MODEL && process.env.ANTHROPIC_EMBEDDING_API_KEY);
       if (!hasAnthropicEmbedding) {
         throw new Error('EMBEDDING_PROVIDER must be set when using Anthropic without embedding configuration');
