@@ -15,6 +15,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
+import { killOnAbort } from './cli-kill';
 
 const WORKSPACE_ROOT = process.cwd();
 
@@ -108,6 +109,8 @@ export const invokeClaude: ToolHandler = async (
       stdio: ['ignore', 'pipe', 'pipe'],
       signal
     });
+
+    killOnAbort(proc, signal, 3000);
 
     let stdout = '';
     let stderr = '';
