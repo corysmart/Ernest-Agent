@@ -158,6 +158,10 @@ Request testing: Use `autoRespond: true` or `AUTO_RESPOND=true` to exercise auto
 
 ## Quick Start
 
+Run the terminal UI to interact with the agent (`npm run ernest-agent` with the server running):
+
+![Terminal UI](docs/Terminal.png)
+
 See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 
 ## Docs Index
