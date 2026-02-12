@@ -8,7 +8,7 @@
  */
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import { homedir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 

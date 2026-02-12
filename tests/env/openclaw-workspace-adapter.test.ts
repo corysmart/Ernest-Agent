@@ -82,10 +82,15 @@ describe('OpenClawWorkspaceAdapter', () => {
   });
 
   it('expands ~/ correctly for workspace path', async () => {
+    // mkdir under homedir may be denied in sandbox; skip if so
     const homeDir = homedir();
     const homeWorkspace = join(homeDir, 'openclaw-workspace-expand-test');
     try {
       mkdirSync(homeWorkspace, { recursive: true });
+    } catch {
+      return; // Skip when sandbox denies mkdir under homedir
+    }
+    try {
       writeFileSync(join(homeWorkspace, 'SOUL.md'), 'Home soul');
 
       const adapter = new OpenClawWorkspaceAdapter({

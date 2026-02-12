@@ -21,17 +21,23 @@ describe('agent-tui integration: follow-up flow', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let baseUrl: string;
   let originalFetch: typeof globalThis.fetch;
+  let canListen = true;
   const runOnceBodies: unknown[] = [];
 
   beforeAll(async () => {
     process.env.LLM_PROVIDER = 'mock';
     process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{"response":"I need details: which file and error?"},"confidence":0.85}';
     server = await buildServer({ logger: false });
-    await server.listen({ port: 0, host: '127.0.0.1' });
-    const addr = server.server.address();
-    const port = typeof addr === 'object' && addr && 'port' in addr ? addr.port : 0;
-    baseUrl = `http://127.0.0.1:${port}`;
-    process.env.AGENT_URL = baseUrl;
+    try {
+      await server.listen({ port: 0, host: '127.0.0.1' });
+      const addr = server.server.address();
+      const port = typeof addr === 'object' && addr && 'port' in addr ? addr.port : 0;
+      baseUrl = `http://127.0.0.1:${port}`;
+      process.env.AGENT_URL = baseUrl;
+    } catch (err) {
+      canListen = false;
+      if (err instanceof Error && !err.message.includes('EADDRINUSE') && !err.message.includes('EPERM')) throw err;
+    }
     originalFetch = globalThis.fetch;
     globalThis.fetch = async (input: unknown, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
@@ -57,9 +63,9 @@ describe('agent-tui integration: follow-up flow', () => {
   });
 
   it('shows Send follow-up after dry run, sends conversation_history on follow-up', async () => {
+    if (!canListen) return;
     let selectCallCount = 0;
     let inputCallCount = 0;
-    let confirmCallCount = 0;
 
     mockSelect.mockImplementation((opts: { choices?: Array<{ value: string }> }) => {
       selectCallCount += 1;
