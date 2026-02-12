@@ -30,6 +30,7 @@ export class AgentRuntime {
       | 'getTime'
       | 'timers'
       | 'generateRunId'
+      | 'maxEventQueueSize'
     >
   > &
     Pick<
@@ -56,7 +57,8 @@ export class AgentRuntime {
       generateRunId: options.generateRunId ?? ((tenantId: string) => {
         const hex = (Date.now().toString(36) + Math.random().toString(36).slice(2));
         return `run-${tenantId}-${hex}`;
-      })
+      }),
+      maxEventQueueSize: options.maxEventQueueSize ?? 100
     };
   }
 
@@ -88,10 +90,19 @@ export class AgentRuntime {
   /**
    * Emits an event to trigger an immediate run for the tenant.
    * No-op when runtime is stopped.
+   * Per-tenant coalescing: at most one pending event per tenant.
+   * When queue is full, oldest events are dropped (backpressure).
    */
   emitEvent(tenantId: string): void {
     if (!this.running) {
       return;
+    }
+    const idx = this.eventQueue.indexOf(tenantId);
+    if (idx !== -1) {
+      this.eventQueue.splice(idx, 1);
+    }
+    while (this.eventQueue.length >= this.options.maxEventQueueSize) {
+      this.eventQueue.shift();
     }
     this.eventQueue.push(tenantId);
     void this.processEventQueue();

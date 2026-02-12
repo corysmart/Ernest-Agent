@@ -436,6 +436,57 @@ describe('AgentRuntime', () => {
     runtime.stop();
   });
 
+  it('emitEvent coalesces duplicate tenant events in queue', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(runCount).toBeLessThanOrEqual(2);
+    expect(runCount).toBeGreaterThanOrEqual(1);
+    runtime.stop();
+  });
+
+  it('emitEvent enforces max queue size', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      maxEventQueueSize: 2
+    });
+
+    runtime.start('t1');
+    for (let i = 0; i < 10; i++) {
+      runtime.emitEvent(`tenant-${i}`);
+    }
+
+    await jest.advanceTimersByTimeAsync(500);
+    expect(runCount).toBeLessThanOrEqual(3);
+    expect(runCount).toBeGreaterThanOrEqual(2);
+    runtime.stop();
+  });
+
   it('per-tenant serialization prevents budget bypass with concurrent runs', async () => {
     let concurrency = 0;
     let maxConcurrency = 0;

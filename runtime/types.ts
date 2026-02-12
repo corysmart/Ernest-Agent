@@ -85,6 +85,8 @@ export interface AgentRuntimeOptions {
   timers?: Pick<typeof globalThis, 'setInterval' | 'clearInterval'>;
   /** Optional run ID generator. Default: uuid-based. */
   generateRunId?: (tenantId: string) => string;
+  /** Max event queue size. When exceeded, oldest events are dropped. Default: 100. */
+  maxEventQueueSize?: number;
 }
 
 /** Logger for runtime audit events (no dependency on StructuredAuditLogger). */
