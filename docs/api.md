@@ -107,15 +107,15 @@ Per-IP rate limits apply. 429 is returned when exceeded.
 
 ### Observability UI (when OBS_UI_ENABLED)
 
-When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`). If `API_KEY` is set, `/ui` routes require authentication.
+When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`). If `API_KEY` is set, `/ui` routes require authentication unless `OBS_UI_SKIP_AUTH=true` (dev only; forces localhost bind when set).
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
 | `/ui` | GET | Serves the React dashboard (SPA) |
 | `/ui/runs` | GET | List of recent run completions (ring buffer, default 100) |
 | `/ui/events` | GET | Server-Sent Events stream of audit events |
-| `/ui/clear` | POST | Clear runs and events buffers; invalidate docs cache |
-| `/ui/docs` | GET | List of markdown docs (id, title, path) from `OBS_UI_MD_ROOTS` |
+| `/ui/clear` | POST | Clear runs and events buffers. Requires `OBS_UI_ALLOW_CLEAR=true` or `NODE_ENV !== production`. |
+| `/ui/docs` | GET | List of markdown docs (id, title only) from `OBS_UI_MD_ROOTS` |
 | `/ui/docs/:id` | GET | Raw markdown content for doc by id |
 
 **OBS_UI_MD_ROOTS**: Comma-separated file/directory paths for markdown files. Default: `README.md,docs/`. Supports `~` expansion. Only `.md` files are served; path traversal is blocked.

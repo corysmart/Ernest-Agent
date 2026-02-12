@@ -34,7 +34,7 @@ export async function registerObservabilityRoutes(
       done();
       return;
     }
-    if (isUiEnabled()) {
+    if (process.env.OBS_UI_SKIP_AUTH === 'true' || process.env.OBS_UI_SKIP_AUTH === '1') {
       done();
       return;
     }
@@ -119,7 +119,13 @@ export async function registerObservabilityRoutes(
     request.raw.on('close', unsub);
   });
 
-  fastify.post('/ui/clear', async () => {
+  fastify.post('/ui/clear', async (_request, reply) => {
+    const allowClear = process.env.OBS_UI_ALLOW_CLEAR === 'true' || process.env.OBS_UI_ALLOW_CLEAR === '1'
+      || (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod');
+    if (!allowClear) {
+      reply.code(403).send({ error: 'Clear not allowed. Set OBS_UI_ALLOW_CLEAR=true or NODE_ENV !== production.' });
+      return;
+    }
     obsStore.clear();
     invalidateDocsCache();
     return { ok: true };

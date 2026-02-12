@@ -77,13 +77,53 @@ describe('Observability UI', () => {
       await server.close();
     });
 
-    it('allows /ui routes without auth when OBS_UI_ENABLED and API_KEY set', async () => {
+    it('allows /ui routes without auth when OBS_UI_SKIP_AUTH and API_KEY set', async () => {
       process.env.OBS_UI_ENABLED = 'true';
+      process.env.OBS_UI_SKIP_AUTH = 'true';
       process.env.API_KEY = 'secret';
 
       const server = await buildServer({ logger: false });
 
       const res = await server.inject({ method: 'GET', url: '/ui/runs' });
+      expect(res.statusCode).toBe(200);
+
+      await server.close();
+    });
+
+    it('requires auth for /ui when API_KEY set and OBS_UI_SKIP_AUTH not set', async () => {
+      process.env.OBS_UI_ENABLED = 'true';
+      process.env.API_KEY = 'secret';
+      delete process.env.OBS_UI_SKIP_AUTH;
+
+      const server = await buildServer({ logger: false });
+
+      const res = await server.inject({ method: 'GET', url: '/ui/runs' });
+      expect(res.statusCode).toBe(401);
+
+      await server.close();
+    });
+
+    it('POST /ui/clear returns 403 when OBS_UI_ALLOW_CLEAR not set in production', async () => {
+      process.env.OBS_UI_ENABLED = 'true';
+      process.env.NODE_ENV = 'production';
+      delete process.env.OBS_UI_ALLOW_CLEAR;
+
+      const server = await buildServer({ logger: false });
+
+      const res = await server.inject({ method: 'POST', url: '/ui/clear' });
+      expect(res.statusCode).toBe(403);
+
+      await server.close();
+    });
+
+    it('POST /ui/clear succeeds when OBS_UI_ALLOW_CLEAR=true', async () => {
+      process.env.OBS_UI_ENABLED = 'true';
+      process.env.OBS_UI_ALLOW_CLEAR = 'true';
+      process.env.NODE_ENV = 'production';
+
+      const server = await buildServer({ logger: false });
+
+      const res = await server.inject({ method: 'POST', url: '/ui/clear' });
       expect(res.statusCode).toBe(200);
 
       await server.close();

@@ -311,7 +311,9 @@ if (require.main === module) {
     
     const obsEnabled = process.env.OBS_UI_ENABLED === 'true' || process.env.OBS_UI_ENABLED === '1'
       || (process.env.OBS_UI_ENABLED === undefined && (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev'));
-    const host = obsEnabled && process.env.OBS_UI_BIND_LOCALHOST !== 'false' ? '127.0.0.1' : '0.0.0.0';
+    const skipAuth = process.env.OBS_UI_SKIP_AUTH === 'true' || process.env.OBS_UI_SKIP_AUTH === '1';
+    const forceLocalhost = skipAuth || (obsEnabled && process.env.OBS_UI_BIND_LOCALHOST !== 'false');
+    const host = forceLocalhost ? '127.0.0.1' : '0.0.0.0';
     try {
       await fastify.listen({ port, host });
       console.log(`Server listening on port ${port}`);
