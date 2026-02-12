@@ -7,6 +7,7 @@ export type { AgentRuntimeOptions } from './types';
 export { ObservationNormalizer } from './observation-normalizer';
 export type { ObservationNormalizerOptions } from './observation-normalizer';
 export { StaticObservationAdapter } from './static-observation-adapter';
+export { CompositeObservationAdapter } from './composite-observation-adapter';
 export type { ObservationAdapter } from './observation-adapter';
 export type {
   RunProvider,

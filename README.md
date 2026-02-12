@@ -36,6 +36,57 @@ The system is structured as a layered architecture with strict boundaries:
 
 The LLM is a replaceable inference engine; cognition and safety are system responsibilities.
 
+## Architecture at a Glance
+
+The framework uses a layered architecture where cognition lives in the system layer. The LLM adapter is a swappable component at the perimeter, not the core.
+
+```mermaid
+flowchart TB
+    subgraph Runtime["runtime"]
+        HB["heartbeat / event loop"]
+        HB --> RA["AgentRuntime"]
+    end
+    subgraph Core["core"]
+        CA["CognitiveAgent"]
+        CA --> DI["DI container"]
+    end
+    subgraph Modules["modules"]
+        MEM["memory"]
+        WLD["world"]
+        SLF["self"]
+        GLS["goals"]
+        AGT["agents"]
+        CA --> MEM
+        CA --> WLD
+        CA --> SLF
+        CA --> GLS
+        CA --> AGT
+    end
+    subgraph Perimeter["perimeter"]
+        LLM["llm adapters"]
+        ENV["env"]
+        SVC["server"]
+        TLS["tools"]
+        CA --> LLM
+        CA --> ENV
+        SVC --> RA
+        RA --> CA
+    end
+    subgraph Security["security"]
+        SEC["validation / sandbox / gating"]
+        LLM -.-> SEC
+        TLS -.-> SEC
+    end
+```
+
+## Model Adapters
+
+Adapters implement a common `LLMAdapter` interface and fall into two categories:
+
+**API-based adapters** (OpenAI, Anthropic, Local): Use API keys and HTTP. Suitable for programmatic usage and server deployment.
+
+**CLI-based adapters** (Codex CLI, Claude Code CLI): Run locally installed CLI tools (`codex`, `claude`) and rely on the user's existing subscription login. No separate API key required. Prompts are passed via temp files or stdin; never via process argv. Suitable for development and subscription-based usage. See [tools/README.md](tools/README.md) for setup.
+
 ## Why This Is Built as a Wrapper (Not a Model)
 
 This project intentionally avoids training or hosting its own foundation model. Cognition should not be conflated with inference. By keeping memory, planning, and safety outside the model, the system remains testable, auditable, and swappable.
@@ -55,6 +106,35 @@ Security is enforced through least privilege and explicit validation:
 - SSRF and path traversal protections in external interfaces.
 
 The system is secure by default and assumes adversarial inputs.
+
+## Security and Trust Model (Summary)
+
+- **Untrusted LLMs**: Local and remote models are treated as untrusted; outputs are validated before execution.
+- **Prompt injection**: Filtering and sanitization before inputs reach the model.
+- **Tool sandbox**: Tools run in worker threads with timeout, abort, and SIGTERM/SIGKILL escalation.
+- **Output validation**: Strict schema validation before any action executes.
+- **Path traversal and SSRF**: Protections for file access and outbound requests.
+- **Audit logging**: Structured logs for LLM requests, agent decisions, and errors.
+- **Rate limiting**: Per-tenant and API-level limits to mitigate abuse.
+
+See [docs/security.md](docs/security.md) for details.
+
+## Testing
+
+```bash
+npm test
+npm run lint
+```
+
+Tests use Jest with a 90% coverage target (branches, functions, lines, statements). New functionality is expected to include tests (TDD). See [docs/testing.md](docs/testing.md) for categories, coverage expectations, and how to add tests.
+
+## Docs Index
+
+- [docs/architecture.md](docs/architecture.md) – Layered architecture, module roles, control loop, design invariants
+- [docs/security.md](docs/security.md) – Trust boundaries, controls, CLI adapter caveats, operational guidance
+- [docs/threat-model.md](docs/threat-model.md) – Assets, adversaries, threats and mitigations
+- [docs/testing.md](docs/testing.md) – Test workflow, coverage, and conventions
+- [docs/openclaw-workspace.md](docs/openclaw-workspace.md) – OpenClaw workspace support (AGENTS, SOUL, TOOLS, skills)
 
 ## Project Status & Roadmap
 
