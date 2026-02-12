@@ -16,6 +16,8 @@ import { MockLLMAdapter } from '../llm/mock-adapter';
 import { OpenAIAdapter } from '../llm/adapters/openai-adapter';
 import { AnthropicAdapter } from '../llm/adapters/anthropic-adapter';
 import { LocalLLMAdapter } from '../llm/adapters/local-adapter';
+import { resolve } from 'path';
+import { homedir } from 'os';
 import { CodexLLMAdapter } from '../llm/adapters/codex-adapter';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { EmbeddingProvider } from '../memory/memory-manager';
@@ -307,7 +309,9 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
   const resolveDns = options.resolveDns ?? (process.env.SSRF_RESOLVE_DNS === 'false' ? false : true);
 
   if (provider === 'codex') {
-    return new CodexLLMAdapter({ cwd: process.cwd() });
+    const rawCwd = process.env.CODEX_CWD;
+    const cwd = rawCwd ? resolve(rawCwd.replace(/^~/, homedir())) : process.cwd();
+    return new CodexLLMAdapter({ cwd });
   }
 
   if (provider === 'openai') {

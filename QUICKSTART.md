@@ -131,6 +131,42 @@ Example with dry run:
 ```
 Use `"dryRun": "with-llm"` to call the LLM and return the decision without executing tools. Use `"dryRun": "without-llm"` to skip the LLM and return a stub decision (no API cost).
 
+## Using a specific branch (Codex)
+
+Codex runs in the repo directory. To use a specific branch:
+
+**Option 1: Checkout branch before starting**
+```bash
+git checkout dev
+npm run dev
+```
+
+**Option 2: Use a separate clone**
+```bash
+# Clone or copy the repo to a dev-branch directory
+git clone . ../ernest-agent-dev  # or your path
+cd ../ernest-agent-dev && git checkout dev
+
+# Run server from main, point Codex at dev clone
+cd /path/to/ernest-agent
+CODEX_CWD=../ernest-agent-dev npm run dev
+```
+
+`CODEX_CWD` supports `~` expansion (e.g. `CODEX_CWD=~/repos/ernest-dev`).
+
+## Resetting dev to match main
+
+To overwrite `dev` with the current state of `main`, commit or stash your changes first, then:
+
+```bash
+git fetch origin main   # if main is on remote
+git checkout dev
+git reset --hard origin/main   # or: git reset --hard main
+git checkout main      # return to main
+```
+
+This discards all commits on `dev`. To preserve history, use `git merge main` instead.
+
 ## Different Port
 
 To run on another port:

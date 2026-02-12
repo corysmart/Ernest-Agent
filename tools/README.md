@@ -36,6 +36,13 @@ The agent can call these tools when given appropriate goals or when the LLM sele
 
 **invoke_codex** – `actionPayload: { prompt: "Your instruction" }`
 
+| Input   | Type   | Description                                         |
+|---------|--------|-----------------------------------------------------|
+| prompt  | string | Instruction (required)                             |
+| cwd     | string | Working directory (default: `process.cwd()` or `CODEX_CWD`) |
+
+Set `CODEX_CWD` to run Codex (and the LLM adapter) in a specific directory—e.g. a clone with `dev` checked out. Supports `~` expansion.
+
 ```bash
 # Equivalent terminal command
 codex "Summarize this project."

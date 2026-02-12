@@ -11,13 +11,16 @@
 
 import { spawn } from 'child_process';
 import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { join, resolve } from 'path';
+import { tmpdir, homedir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { killOnAbort, KILL_GRACE_MS } from './cli-kill';
 
-const WORKSPACE_ROOT = process.cwd();
+const WORKSPACE_ROOT = (() => {
+  const raw = process.env.CODEX_CWD;
+  return raw ? resolve(raw.replace(/^~/, homedir())) : process.cwd();
+})();
 
 export const invokeCodex: ToolHandler = async (
   input: Record<string, unknown>
