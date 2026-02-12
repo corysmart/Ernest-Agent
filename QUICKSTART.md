@@ -39,7 +39,14 @@ export ANTHROPIC_EMBEDDING_MODEL=...
 # Leave OPENAI_API_KEY and ANTHROPIC_API_KEY unset
 ```
 
-See [tools/README.md](tools/README.md) for CLI setup. The server uses Codex when no API keys are set.
+**Option D: Claude Code CLI**
+```bash
+# Install: brew install claude-code  # or npm install -g @anthropic-ai/claude-code
+# Run: claude auth login
+# The agent uses invoke_claude when given goals that call it
+```
+
+See [tools/README.md](tools/README.md) for CLI setup. The server uses Codex when no API keys are set. CLI adapters use temp files (not argv) and are suitable for development; use API adapters for production with strict isolation.
 
 ## 3. Start the Server
 
@@ -48,6 +55,8 @@ npm run dev
 ```
 
 Server listens on port 3000 (or `PORT` if set). You should see: `Server listening on port 3000`.
+
+**Observability UI**: In development, the dashboard is enabled by default. Visit `http://localhost:3000/ui` for Runs, Audit Events (SSE), and Docs. Set `OBS_UI_ENABLED=true` explicitly to enable in other environments. Run `npm run ui:build` first if the UI is not built.
 
 ## 4. Send Requests
 

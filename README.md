@@ -36,6 +36,20 @@ The system is structured as a layered architecture with strict boundaries:
 
 The LLM is a replaceable inference engine; cognition and safety are system responsibilities.
 
+## How It Works
+
+Each agent run follows a fixed pipeline: **observation → memory retrieval → planning → LLM query → validation → tools → storage**.
+
+1. **Observation** – The environment (e.g., OpenClaw workspace, request state) supplies current state. Observation adapters provide text-based inputs; a normalizer applies size caps and safe object validation.
+2. **Memory retrieval** – Episodic, semantic, and procedural memories are fetched for the current goals. Embedding-based retrieval uses goal relevance and time decay.
+3. **Planning** – The goal stack and planner produce candidate actions. The world and self models are used to simulate outcomes before choosing.
+4. **LLM query** – The chosen prompt is sent to the LLM adapter (API or CLI). The model returns a proposed decision (action type, payload, confidence).
+5. **Validation** – Output is schema-validated. Malformed or unexpected responses are rejected before any action.
+6. **Tools** – Validated actions map to tools in the registry. Execution is permission-gated and sandboxed (worker threads, timeout, abort, SIGTERM→SIGKILL).
+7. **Storage** – Episodic memory is updated with the outcome; self-model and goal status are refreshed.
+
+Dry-run modes (`with-llm` / `without-llm`) skip act and storage. When `autoRespond` is enabled and a `user_message` exists without an explicit goal, the server injects a default "Respond to user" goal; otherwise the agent returns idle.
+
 ## Architecture at a Glance
 
 The framework uses a layered architecture where cognition lives in the system layer. The LLM adapter is a swappable component at the perimeter, not the core.
@@ -85,7 +99,11 @@ Adapters implement a common `LLMAdapter` interface and fall into two categories:
 
 **API-based adapters** (OpenAI, Anthropic, Local): Use API keys and HTTP. Suitable for programmatic usage and server deployment.
 
-**CLI-based adapters** (Codex CLI, Claude Code CLI): Run locally installed CLI tools (`codex`, `claude`) and rely on the user's existing subscription login. No separate API key required. Prompts are passed via temp files or stdin; never via process argv. Suitable for development and subscription-based usage. See [tools/README.md](tools/README.md) for setup.
+**CLI-based adapters** (Codex CLI, Claude Code CLI): Run locally installed CLI tools (`codex`, `claude`) and rely on the user's existing subscription login. No separate API key required. The agent invokes these via tools such as `invoke_codex` and `invoke_claude`. Prompts are passed via temp files or stdin; never via process argv (avoids prompt leakage in process listings). Temp files use `0o600` permissions. Use API adapters when you need strict isolation, controlled rate limits, or server-side deployment without local CLIs. See [tools/README.md](tools/README.md) for setup.
+
+## Observability UI
+
+When `OBS_UI_ENABLED=true` (default in dev), a local dashboard is served at `/ui`. Tabs: Runs (recent completions), Audit Events (SSE stream), Docs (markdown viewer). Local-only by default: the server binds to localhost unless configured otherwise. When `API_KEY` is set, `/ui` routes require authentication unless `OBS_UI_SKIP_AUTH=true` (which forces the server to bind to localhost). SSE events include `run_complete` for live run updates. Markdown is sanitized before rendering. `/ui/clear` requires `OBS_UI_ALLOW_CLEAR=true` or non-production `NODE_ENV`. See [docs/api.md](docs/api.md) for endpoints and env vars.
 
 ## Why This Is Built as a Wrapper (Not a Model)
 
@@ -137,12 +155,12 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 ## Docs Index
 
 - [QUICKSTART.md](QUICKSTART.md) – Install, run, and curl the server
-- [docs/architecture.md](docs/architecture.md) – Layered architecture, module roles, control loop, design invariants
-- [docs/security.md](docs/security.md) – Trust boundaries, controls, CLI adapter caveats, operational guidance
+- [docs/architecture.md](docs/architecture.md) – Layered architecture, module roles, control loop, runtime, design invariants
+- [docs/security.md](docs/security.md) – Trust boundaries, controls, CLI caveats, observability UI security
 - [docs/threat-model.md](docs/threat-model.md) – Assets, adversaries, threats and mitigations
-- [docs/testing.md](docs/testing.md) – Test workflow, coverage, and conventions
+- [docs/testing.md](docs/testing.md) – Test workflow, coverage, conventions
 - [docs/openclaw-workspace.md](docs/openclaw-workspace.md) – OpenClaw workspace support (AGENTS, SOUL, TOOLS, skills)
-- [docs/api.md](docs/api.md) – HTTP API reference (health, run-once, dryRun)
+- [docs/api.md](docs/api.md) – HTTP API reference (health, run-once, dryRun, observability UI)
 
 ## Project Status & Roadmap
 

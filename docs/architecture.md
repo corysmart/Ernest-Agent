@@ -24,8 +24,8 @@ This separation enables:
 | `env` | Environment interface for observation and action; mocks for testing |
 | `security` | Prompt injection filtering, output validation, permission gating, sandboxed tools, rate limits, SSRF/path protections, audit logging |
 | `server` | Fastify API, request orchestration, container wiring |
-| `runtime` | AgentRuntime with heartbeat, event triggers, budgets, circuit breaker, kill switch |
-| `tools` | Tool registry; invoke_codex, invoke_claude for CLI-based inference |
+| `runtime` | AgentRuntime with heartbeat, event queue, event triggers, per-tenant budgets (max runs/hour, tokens/day), circuit breaker with cooldown, kill switch; ObservationAdapter and ObservationNormalizer for text-only observations |
+| `tools` | Module-based tool registry; invoke_codex, invoke_claude for CLI-based inference; sandboxed execution in worker threads |
 
 ## Control Loop
 
@@ -44,6 +44,18 @@ The agent executes a state machine on each run:
 11. **learn** – Update self-model and goal status from outcome
 
 The loop may exit early on error, idle (no goal), completion, or dry run.
+
+### Runtime Overview
+
+`AgentRuntime` orchestrates runs via a heartbeat and an event queue. Tenants are processed serially per tenant. Per-tenant budgets (max runs/hour, max tokens/day) block runs when exceeded. A circuit breaker opens on consecutive failures and blocks further runs until cooldown. A kill switch stops the runtime immediately. Run timeouts trigger abort and SIGTERM→SIGKILL escalation.
+
+### Observation Pipeline
+
+`ObservationAdapter` implementations yield text-based observations for the agent. `ObservationNormalizer` produces `StateObservation` from raw inputs with configurable size caps and safe object validation. Only text-safe, structured values are passed into the cognitive loop; non-serializable or unsafe objects are rejected.
+
+### Tool Execution
+
+Tools are registered in a module-based registry. Handlers are looked up by name; no `eval` or dynamic code execution. Execution runs in worker threads with timeout, abort signal, SIGTERM→SIGKILL escalation, and process group termination (Unix) so forked children are killed with the parent. All tool inputs are validated for structured-clone compatibility before being sent to workers.
 
 **Dry run modes** (when `dryRun` is set): Skip act, memory, and self-model updates. Two variants:
 - `with-llm`: Full loop including LLM call; returns decision without executing tools. Useful to preview what the model would do (e.g., with Codex).
@@ -106,3 +118,7 @@ The LLM adapter is at the perimeter. Core cognition does not depend on a specifi
 - **Tool execution gated**: Actions must pass permission checks before execution. Tools run in sandboxed workers.
 - **Strict output validation**: LLM responses are schema-validated before any side effect.
 - **Local LLMs untrusted**: Local models receive the same validation and sandbox treatment as remote APIs.
+
+## Observability
+
+When `OBS_UI_ENABLED`, the server exposes an in-memory observability store. Runs and audit events are held in ring buffers (default 100 runs, 500 events). Not durable: data is lost on restart. Intended for development and local inspection. The `/ui` dashboard provides Runs, Audit Events (SSE), and a Docs (markdown) viewer.

@@ -57,13 +57,17 @@ CLI-based adapters (Codex, Claude Code) run locally installed tools. They introd
 
 - **Risks**: The CLI binary is trusted by the host. A compromised or malicious CLI could exfiltrate data or persist state. Temp files and child processes can leak if not cleaned up.
 - **Mitigations**:
-  - Prompts are not passed in process argv; they go through temp files or stdin to avoid exposure in process listings.
+  - Prompts are not passed in process argv; they go through temp files or stdin to avoid prompt leakage in process listings.
   - Temp files use mode `0o600` so only the owner can read.
   - Abort signal plus SIGTERM/SIGKILL escalation ensures CLI processes are terminated on timeout.
   - Process group termination (Unix) kills forked children when the parent is killed.
   - Path validation for `cwd` and prompt file paths.
 
 CLI adapters are suitable for development and subscription-based usage. For production with strict isolation, prefer API adapters behind a controlled service boundary.
+
+### Observability UI
+
+When `OBS_UI_ENABLED`, `/ui` routes are protected by the same auth as the API. If `API_KEY` is set, `/ui` requires authentication unless `OBS_UI_SKIP_AUTH=true` (which forces the server to bind to localhost). `POST /ui/clear` requires `OBS_UI_ALLOW_CLEAR=true` in production to prevent accidental data loss. Markdown content in the Docs viewer is sanitized (DOMPurify) before rendering.
 
 ## Operational Guidance
 
