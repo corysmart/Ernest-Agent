@@ -2,7 +2,7 @@
  * Tests for ernest-agent TUI helpers (extractAssistantContent, formatResult).
  */
 
-import { extractAssistantContent, formatResult, type RunOnceResponse } from '../../cli/agent-tui-helpers';
+import { extractAssistantContent, formatDurationMs, formatResult, type RunOnceResponse } from '../../cli/agent-tui-helpers';
 
 describe('agent-tui-helpers', () => {
   describe('extractAssistantContent', () => {
@@ -92,6 +92,24 @@ describe('agent-tui-helpers', () => {
       const out = formatResult(result);
       expect(out).toContain('Status: error');
       expect(out).toContain('Error: Prompt injection detected');
+    });
+
+    it('formats duration as human-readable', () => {
+      const result: RunOnceResponse = {
+        status: 'completed',
+        durationMs: 134000
+      };
+      const out = formatResult(result);
+      expect(out).toContain('Duration: 2m 14s');
+    });
+  });
+
+  describe('formatDurationMs', () => {
+    it('formats seconds only when under 60s', () => {
+      expect(formatDurationMs(45000)).toBe('45s');
+    });
+    it('formats minutes and seconds when 60s or more', () => {
+      expect(formatDurationMs(134000)).toBe('2m 14s');
     });
   });
 });

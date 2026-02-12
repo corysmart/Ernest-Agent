@@ -113,8 +113,22 @@ function authenticateRequest(request: FastifyRequest): AuthenticatedRequest | nu
   return null; // Invalid or missing auth
 }
 
+const DEFAULT_RUN_ONCE_TIMEOUT_MS = 600_000; // 10 min, allows complex tasks when needed
+
+function getRunOnceTimeoutMs(): number {
+  const raw = Number(process.env.RUN_ONCE_TIMEOUT_MS ?? DEFAULT_RUN_ONCE_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw < 1) {
+    return DEFAULT_RUN_ONCE_TIMEOUT_MS;
+  }
+  return Math.floor(raw);
+}
+
 export async function buildServer(options?: { logger?: boolean }) {
-  const fastify = Fastify({ logger: options?.logger ?? true });
+  const requestTimeoutMs = getRunOnceTimeoutMs();
+  const fastify = Fastify({
+    logger: options?.logger ?? true,
+    requestTimeout: requestTimeoutMs
+  });
   const containerContext = await buildContainer();
   const { container, rateLimiter, toolRunner } = containerContext;
   
@@ -279,7 +293,32 @@ export async function buildServer(options?: { logger?: boolean }) {
       obsStore.addRunStart(requestId, tenantId);
     }
 
-    const result = await agent.runOnce();
+    const timeoutMs = getRunOnceTimeoutMs();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(`Run timed out after ${timeoutMs / 1000}s`)),
+        timeoutMs
+      );
+    });
+    let result;
+    try {
+      result = await Promise.race([agent.runOnce(), timeoutPromise]);
+    } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId);
+      const isTimeout = err instanceof Error && err.message.includes('timed out');
+      if (isTimeout) {
+        reply.code(504).send({
+          status: 'error',
+          error: err.message,
+          stateTrace: []
+        });
+        return;
+      }
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
 
     if (obsStore) {
       const observationKeys = observation.state && typeof observation.state === 'object'
@@ -301,28 +340,31 @@ export async function buildServer(options?: { logger?: boolean }) {
       });
     }
 
+    const durationMs = Date.now() - runStartMs;
+    const response = { ...result, durationMs };
+
     // Return appropriate HTTP status codes based on agent result
     if (result.status === 'error') {
       // Client errors (4xx) vs server errors (5xx) based on error type
       const statusCode = result.error?.includes('Invalid') || result.error?.includes('not permitted')
         ? 400 // Bad request for validation/permission errors
         : 500; // Internal server error for other failures
-      reply.code(statusCode).send(result);
+      reply.code(statusCode).send(response);
       return;
     }
 
     if (result.status === 'idle') {
-      reply.code(200).send(result);
+      reply.code(200).send(response);
       return;
     }
 
     if (result.status === 'dry_run') {
-      reply.code(200).send(result);
+      reply.code(200).send(response);
       return;
     }
 
     // Success case (completed)
-    reply.code(200).send(result);
+    reply.code(200).send(response);
   });
 
   return fastify;

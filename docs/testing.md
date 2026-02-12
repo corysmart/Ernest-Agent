@@ -5,64 +5,90 @@
 ```bash
 npm install
 npm test
+npm run test:debug
 npm run test:coverage
+npm run test:e2e
 npm run lint
+npm run build
+npm run dev:test
 ```
 
-- **npm test**: Runs Jest in band (single-threaded) for unit, integration, and e2e tests.
-- **npm run test:coverage**: Same as `npm test` with coverage report. Enforces thresholds.
-- **npm run test:e2e**: Runs only e2e tests (real HTTP, mock LLM).
-- **npm run lint**: ESLint across TypeScript files.
+- Runtime: Node.js `>=18` (`package.json` `engines.node`).
+- **npm test**: `jest --runInBand` (single process), runs all `tests/**/*.test.ts`.
+- **npm run test:debug**: Same as `npm test`, but disables Jest silent mode for easier debugging.
+- **npm run test:coverage**: `jest --coverage`, runs full suite with coverage output and threshold checks.
+- **npm run test:e2e**: `jest --runInBand --testPathPattern=tests/e2e`, runs only e2e tests.
+- **npm run lint**: `eslint . --ext .ts` (static checks, not Jest).
+- **npm run dev:test**: Starts compiled server in mock mode and runs a sample request (`start-server-and-test` on `/health` + `request:run-goal`).
+- **npm run build**: Compiles TypeScript to `dist/`; run before `dev:test` when `dist/` is stale.
 
-## Test Categories
+Jest configuration (`jest.config.cjs`) uses:
 
-| Category | Location | Purpose |
-|----------|----------|---------|
-| Unit | `tests/<module>/` | Isolated component behavior; mocked dependencies |
-| Integration | `tests/integration/` | Cross-module flows (planning loop, memory retrieval, world simulation) |
-| Security | `tests/security/` | Prompt injection, SSRF, path traversal, output validation, sandbox, rate limiting |
-| E2E | `tests/e2e/` | Real HTTP against live server; mock LLM; CI-safe, no external services |
+- `preset: ts-jest`
+- `testEnvironment: node`
+- `testMatch: **/tests/**/*.test.ts`
+- `testTimeout: 30000`
+- `silent: true` by default
 
-Tests are offline-safe where possible. DNS-dependent tests use mocks or explicit stubs to avoid network calls in CI.
+## Test Suite Layout
+
+| Suite | Location | Purpose |
+|------|----------|---------|
+| Component/module tests | `tests/agents/`, `tests/cli/`, `tests/core/`, `tests/env/`, `tests/goals/`, `tests/llm/`, `tests/memory/`, `tests/runtime/`, `tests/self/`, `tests/server/`, `tests/tools/`, `tests/world/` | Behavior of individual modules, usually with mocked boundaries |
+| Integration | `tests/integration/` | Cross-module flows (planning loop, memory retrieval, world simulation, model swapping, audit flow) |
+| Security | `tests/security/` | Prompt injection, SSRF, path traversal, sandboxing, tenant isolation, validation, rate limiting |
+| End-to-end | `tests/e2e/` | Real HTTP against live Fastify server with mock LLM |
+
+`tests/fixtures/` holds fixture files for tests (for example, CLI prompt-file cases).
 
 ## Coverage Expectations
 
-Coverage thresholds (configured in `jest.config.cjs`):
+Coverage thresholds are configured in `jest.config.cjs` and enforced on coverage runs:
 
 - Branches: 90%
 - Functions: 90%
 - Lines: 90%
 - Statements: 90%
 
-New modules and tools are expected to include tests. Coverage gaps should be justified (e.g., platform-specific or integration-only code) and documented.
+Coverage collection targets these code areas:
+
+- `cli/`, `core/`, `memory/`, `world/`, `self/`, `goals/`, `agents/`, `llm/`, `env/`, `runtime/`, `server/`, `security/`
+
+Some files are intentionally excluded via `coveragePathIgnorePatterns` (entrypoints, selected adapters, tooling workers, and other non-target files).
 
 ## CI Notes
 
 - Tests run without external services by default. PostgreSQL-backed tests use `pg-mem` for in-process storage.
-- DNS validation tests mock resolution to avoid real DNS lookups.
-- CLI tool tests mock or skip execution when the CLI binary is not installed.
+- DNS-related tests use mocks/stubs so CI does not require live DNS/network dependencies.
+- CLI tool tests mock `child_process.spawn` for `codex`/`claude`, so binaries do not need to be installed in CI.
+- E2E tests set `LLM_PROVIDER=mock`, set `MOCK_LLM_RESPONSE` explicitly, and listen on an ephemeral localhost port.
 
 ## Adding Tests for New Modules or Tools
 
-1. **Unit tests**: Create `tests/<module>/<name>.test.ts`. Mock external dependencies (LLM adapter, DB, etc.). Use Jest `describe`/`it` and assert on observable behavior.
-2. **Integration tests**: Add to `tests/integration/` when testing flows across modules. Use real (or pg-mem) storage where appropriate.
-3. **Security tests**: Add to `tests/security/` for validation, sandboxing, path traversal, and injection. Use adversarial inputs.
-4. **Tool tests**: For new tools, create `tests/tools/<tool-name>.test.ts`. Mock spawn/child processes when the tool depends on external binaries. Test path validation, abort handling, and error cases.
+1. **Module tests**: Add to the matching `tests/<module>/` directory. Mock external boundaries (LLM APIs, DB/network, process execution).
+2. **Integration tests**: Add to `tests/integration/` for multi-module flows and end-to-end behavior inside the process.
+3. **Security tests**: Add to `tests/security/` for adversarial/pathological inputs.
+4. **Tool tests**: Add to `tests/tools/` and mock process execution for external CLIs.
 
 Example tool test pattern:
 
 ```typescript
-// Mock the child_process spawn to avoid running real CLI
-jest.mock('child_process', () => ({
-  spawn: jest.fn(() => ({ on: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } }))
-}));
+import { spawn } from 'child_process';
+jest.mock('child_process');
+const mockedSpawn = spawn as jest.MockedFunction<typeof spawn>;
+
+mockedSpawn.mockReturnValue({
+  stdout: { on: jest.fn() },
+  stderr: { on: jest.fn() },
+  on: jest.fn()
+} as never);
 ```
 
-Mock all imports for unit tests to keep them fast and deterministic.
+Prefer deterministic tests with explicit mocks and stable fixtures.
 
 ## E2E Tests
 
-`tests/e2e/` contains CI-safe end-to-end tests. They start a real HTTP server on an ephemeral port, issue real `fetch` requests, and use the mock LLM adapter. No external services (API keys, database, CLI tools) are required.
+`tests/e2e/` is CI-safe: tests start a real server on an ephemeral localhost port, send real `fetch` requests, and run with mock LLM responses. No external API keys, DB services, or CLI binaries are required.
 
 - **Run with**: `npm test` (included) or `npm run test:e2e` (e2e only)
 - **Current scope**: Single durable test that validates the full stack (HTTP -> Fastify -> container -> agent -> response). Update only if the core API or architecture changes.

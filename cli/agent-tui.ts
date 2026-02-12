@@ -12,6 +12,12 @@ const PORT = Number(process.env.PORT) || 3000;
 const BASE_URL = process.env.AGENT_URL ?? `http://127.0.0.1:${PORT}`;
 const API_KEY = process.env.API_KEY ?? process.env.AGENT_API_KEY;
 
+/** Max ms for run-once request. Default 10 min. Set RUN_ONCE_TIMEOUT_MS to override. */
+const REQUEST_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.RUN_ONCE_TIMEOUT_MS ?? 600_000);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 600_000;
+})();
+
 type RunMode = 'run' | 'dry-with-llm' | 'dry-without-llm';
 
 interface ConversationEntry {
@@ -61,10 +67,23 @@ async function checkHealth(): Promise<boolean> {
 }
 
 async function runOnce(payload: RunOnceRequest): Promise<RunOnceResponse> {
-  const res = await fetchApi('/agent/run-once', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetchApi('/agent/run-once', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${text}`);
@@ -136,7 +155,7 @@ export async function main(): Promise<void> {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const choices: Array<{ name: string; value: string }> = [
-      ...(lastExchange ? [{ name: 'Send follow-up (response to clarifying question)', value: 'follow-up' }] : []),
+      ...(lastExchange ? [{ name: 'Send follow-up', value: 'follow-up' }] : []),
       { name: 'Run agent', value: 'run' },
       { name: 'Dry run (with LLM)', value: 'dry-with-llm' },
       { name: 'Dry run (without LLM)', value: 'dry-without-llm' },
@@ -145,7 +164,7 @@ export async function main(): Promise<void> {
     ];
 
     const action = await select({
-      message: lastExchange ? 'Agent asked a question—send a follow-up, or choose another action:' : 'Choose an operation',
+      message: lastExchange ? 'Continue the conversation or choose another action:' : 'Choose an operation',
       choices,
       default: lastExchange ? 'follow-up' : undefined
     });
@@ -164,7 +183,7 @@ export async function main(): Promise<void> {
       let payload: RunOnceRequest;
       if (action === 'follow-up' && lastExchange) {
         const followUp = await input({
-          message: 'Your follow-up (response to clarifying question)',
+          message: 'Your follow-up message',
           validate: (v: string) => (v.trim() ? true : 'Required')
         });
         payload = {
@@ -186,8 +205,12 @@ export async function main(): Promise<void> {
       for (;;) {
         const startMs = Date.now();
         const progressInterval = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - startMs) / 1000);
-          process.stdout.write(`\r\x1b[KRunning... ${elapsed}s (open ${getBaseUrl().replace('127.0.0.1', 'localhost')}/ui for live progress)\x1b[0m`);
+          const elapsedSec = Math.floor((Date.now() - startMs) / 1000);
+          const remainingSec = Math.max(0, Math.floor(REQUEST_TIMEOUT_MS / 1000) - elapsedSec);
+          const remainingStr = remainingSec >= 60 ? `~${Math.ceil(remainingSec / 60)} min left` : `${remainingSec}s left`;
+          process.stdout.write(
+            `\r\x1b[KRunning... ${elapsedSec}s (${remainingStr}) — ${getBaseUrl().replace('127.0.0.1', 'localhost')}/ui\x1b[0m`
+          );
         }, 1000);
         try {
           result = await runOnce(payload);
