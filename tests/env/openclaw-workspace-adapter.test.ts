@@ -102,6 +102,44 @@ describe('OpenClawWorkspaceAdapter', () => {
     }
   });
 
+  it('skips relative extraSkillDirs that escape workspace', async () => {
+    const parentDir = join(workspaceRoot, '..');
+    const outsiderPath = join(parentDir, 'outside-skills');
+    try {
+      mkdirSync(outsiderPath, { recursive: true });
+      mkdirSync(join(outsiderPath, 'evil'), { recursive: true });
+      writeFileSync(join(outsiderPath, 'evil', 'SKILL.md'), 'Evil skill');
+
+      const adapter = new OpenClawWorkspaceAdapter({
+        workspaceRoot,
+        includeSkills: true,
+        extraSkillDirs: ['../outside-skills']
+      });
+      const obs = await adapter.getObservations();
+
+      expect(obs.skills).toBeUndefined();
+    } finally {
+      try {
+        require('fs').rmSync(outsiderPath, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('skips files exceeding maxFileBytes', async () => {
+    const large = 'x'.repeat(100);
+    writeFileSync(join(workspaceRoot, 'SOUL.md'), large);
+
+    const adapter = new OpenClawWorkspaceAdapter({
+      workspaceRoot,
+      maxFileBytes: 50
+    });
+    const obs = await adapter.getObservations();
+
+    expect(obs.soul).toBeUndefined();
+  });
+
   it('reads USER.md and MEMORY.md when present', async () => {
     writeFileSync(join(workspaceRoot, 'USER.md'), '# User');
     writeFileSync(join(workspaceRoot, 'MEMORY.md'), '# Memory');

@@ -19,6 +19,20 @@ describe('CompositeObservationAdapter', () => {
     expect(obs).toEqual({});
   });
 
+  it('continues when one adapter throws', async () => {
+    const okAdapter = new StaticObservationAdapter({ a: '1' });
+    const badAdapter: import('../../runtime/observation-adapter').ObservationAdapter = {
+      async getObservations() {
+        throw new Error('Adapter failed');
+      }
+    };
+    const composite = new CompositeObservationAdapter([okAdapter, badAdapter]);
+
+    const obs = await composite.getObservations();
+
+    expect(obs.a).toBe('1');
+  });
+
   it('returns single adapter result when only one', async () => {
     const a = new StaticObservationAdapter({ x: 'y' });
     const composite = new CompositeObservationAdapter([a]);

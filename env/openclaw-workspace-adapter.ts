@@ -13,7 +13,7 @@
  * See: https://docs.openclaw.ai/reference/AGENTS.default
  */
 
-import { readFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { assertSafePath } from '../security/path-traversal';
@@ -38,8 +38,10 @@ export interface OpenClawWorkspaceAdapterOptions {
   includeDailyMemory?: boolean;
   /** Include skills from workspace/skills/<name>/SKILL.md. Default: false. */
   includeSkills?: boolean;
-  /** Extra skill directories to scan. Must be absolute paths or relative to workspace root. */
+  /** Extra skill directories to scan. Absolute paths or relative to workspace root. Relative paths must not escape workspace (.. rejected). */
   extraSkillDirs?: string[];
+  /** Max bytes per file before skipping. Default: 524288 (512KB). */
+  maxFileBytes?: number;
   /** Optional clock for deterministic tests. */
   getDate?: () => string;
 }
@@ -61,11 +63,14 @@ function formatDateLocal(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+const DEFAULT_MAX_FILE_BYTES = 524288; // 512KB
+
 export class OpenClawWorkspaceAdapter implements ObservationAdapter {
   private readonly workspaceRoot: string;
   private readonly includeDailyMemory: boolean;
   private readonly includeSkills: boolean;
   private readonly extraSkillDirs: string[];
+  private readonly maxFileBytes: number;
   private readonly getDate: () => string;
 
   constructor(options: OpenClawWorkspaceAdapterOptions = {}) {
@@ -74,7 +79,22 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
     this.includeDailyMemory = options.includeDailyMemory ?? true;
     this.includeSkills = options.includeSkills ?? false;
     this.extraSkillDirs = options.extraSkillDirs ?? [];
+    this.maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
     this.getDate = options.getDate ?? (() => formatDateLocal(new Date()));
+  }
+
+  private readFileIfWithinLimit(filePath: string, baseForValidation?: string): string | undefined {
+    try {
+      const stat = statSync(filePath);
+      if (!stat.isFile() || stat.size > this.maxFileBytes) {
+        return undefined;
+      }
+      const base = baseForValidation ?? this.workspaceRoot;
+      assertSafePath(base, filePath);
+      return readFileSync(filePath, 'utf8');
+    } catch {
+      return undefined;
+    }
   }
 
   async getObservations(): Promise<RawTextObservation> {
@@ -87,11 +107,9 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
     for (const [key, filename] of Object.entries(OBSERVATION_KEYS)) {
       const filePath = join(this.workspaceRoot, filename);
       if (existsSync(filePath)) {
-        try {
-          assertSafePath(this.workspaceRoot, filePath);
-          result[key] = readFileSync(filePath, 'utf8');
-        } catch {
-          /* skip on path error */
+        const content = this.readFileIfWithinLimit(filePath);
+        if (content !== undefined) {
+          result[key] = content;
         }
       }
     }
@@ -105,11 +123,9 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
           const filePath = join('memory', `${date}.md`);
           const fullPath = join(this.workspaceRoot, filePath);
           if (existsSync(fullPath)) {
-            try {
-              assertSafePath(this.workspaceRoot, filePath);
-              result[`memory_${date.replace(/-/g, '_')}`] = readFileSync(fullPath, 'utf8');
-            } catch {
-              /* skip */
+            const content = this.readFileIfWithinLimit(fullPath);
+            if (content !== undefined) {
+              result[`memory_${date.replace(/-/g, '_')}`] = content;
             }
           }
         }
@@ -123,7 +139,15 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
         { base: this.workspaceRoot, path: workspaceSkills }
       ];
       for (const d of this.extraSkillDirs) {
-        const resolved = d.startsWith('/') || d.startsWith('~') ? expandPath(d) : join(this.workspaceRoot, d);
+        const isAbsolute = d.startsWith('/') || d.startsWith('~');
+        const resolved = isAbsolute ? expandPath(d) : join(this.workspaceRoot, d);
+        if (!isAbsolute) {
+          try {
+            assertSafePath(this.workspaceRoot, resolved);
+          } catch {
+            continue;
+          }
+        }
         dirsToScan.push({ base: resolved, path: resolved });
       }
       for (const { base, path: skillDir } of dirsToScan) {
@@ -138,12 +162,9 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
           if (!ent.isDirectory()) continue;
           const skillPath = join(skillDir, ent.name, 'SKILL.md');
           if (!existsSync(skillPath)) continue;
-          try {
-            assertSafePath(base, skillPath);
-            const content = readFileSync(skillPath, 'utf8');
+          const content = this.readFileIfWithinLimit(skillPath, base);
+          if (content !== undefined) {
             skillsResult.push(`## Skill: ${ent.name}\n${content}`);
-          } catch {
-            /* skip on path validation failure */
           }
         }
       }

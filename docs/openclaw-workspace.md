@@ -47,7 +47,8 @@ const observation = normalizer.normalize(raw);
 - **workspaceRoot**: Default `~/.openclaw/workspace`. Supports `~` expansion.
 - **includeDailyMemory**: Include `memory/YYYY-MM-DD.md` for today and yesterday. Default: true.
 - **includeSkills**: Include `workspace/skills/<name>/SKILL.md`. Default: false.
-- **extraSkillDirs**: Additional directories to scan for skills. Absolute paths or relative to workspace.
+- **extraSkillDirs**: Additional directories to scan for skills. Absolute paths or relative to workspace. Relative paths must not escape the workspace root (`..` is rejected).
+- **maxFileBytes**: Max bytes per file before skipping. Default: 524288 (512KB).
 - **getDate**: Override for deterministic tests (`() => 'YYYY-MM-DD'`). Default uses local date (not UTC).
 
 ## Skills Config
