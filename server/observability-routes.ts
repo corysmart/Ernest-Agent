@@ -105,6 +105,8 @@ export async function registerObservabilityRoutes(
 
   fastify.get('/ui/runs', async () => obsStore.getRuns());
 
+  fastify.get('/ui/active-runs', async () => obsStore.getActiveRuns());
+
   fastify.get('/ui/events', async (request, reply) => {
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',

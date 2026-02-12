@@ -36,6 +36,12 @@ export class CognitiveAgent {
     const stateTrace: AgentState[] = [];
     const transition = (state: AgentState) => {
       stateTrace.push(state);
+      void this.options.auditLogger?.logRunProgress?.({
+        tenantId: this.options.tenantId,
+        requestId: this.options.requestId,
+        state,
+        stateTrace: [...stateTrace]
+      });
     };
 
     try {
@@ -131,80 +137,73 @@ export class CognitiveAgent {
           reasoning: 'Dry run (no LLM)'
         };
       } else {
-      transition('query_llm');
-      const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
-      const systemPrompt = buildSystemPrompt({
-        memoryContext,
-        worldState,
-        selfSnapshot,
-        goal,
-        plan, // Include plan in system prompt
-        promptFilter: this.options.promptFilter, // Pass prompt filter for sanitization
-        allowedActionTypes: allowedTypes ?? undefined
-      });
-      const userPrompt = sanitized.sanitized;
+        transition('query_llm');
+        const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
+        const systemPrompt = buildSystemPrompt({
+          memoryContext,
+          worldState,
+          selfSnapshot,
+          goal,
+          plan,
+          promptFilter: this.options.promptFilter,
+          allowedActionTypes: allowedTypes ?? undefined
+        });
+        const llmProvider = this.options.llmAdapter.constructor.name.replace('Adapter', '').toLowerCase();
+        const MAX_LLM_RETRIES = 2;
+        let llmDecision: AgentDecision | null = null;
 
-      const request: PromptRequest = {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        maxTokens: 512,
-        temperature: 0.2
-      };
+        for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt += 1) {
+          const userPrompt = attempt === 0
+            ? sanitized.sanitized
+            : `${sanitized.sanitized}\n\n[Your previous response was invalid JSON. Output ONLY a valid JSON object—no markdown, no explanation. Example: {"actionType":"pursue_goal","actionPayload":{},"confidence":0.9,"reasoning":"..."}]`;
 
-      // Log LLM request
-      const llmProvider = this.options.llmAdapter.constructor.name.replace('Adapter', '').toLowerCase();
-      let response;
-      try {
-        response = await this.options.llmAdapter.generate(request);
-        
-        // P2: Log successful LLM request - best-effort, don't break agent flow
-        try {
-          await this.options.auditLogger?.logLLMRequest({
-            tenantId: this.options.tenantId,
-            requestId: this.options.requestId,
-            provider: llmProvider,
-            model: 'unknown', // Adapters don't expose model name easily
-            tokensUsed: response.tokensUsed,
-            success: true
-          });
-        } catch (logError) {
-          // P2: Audit logging failures should not break agent flow
-          // Log error but continue execution
-          console.error(`[ERROR] Failed to log LLM request: ${logError instanceof Error ? logError.message : String(logError)}`);
+          const request: PromptRequest = {
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+            maxTokens: 512,
+            temperature: attempt > 0 ? 0.1 : 0.2
+          };
+
+          let response;
+          try {
+            response = await this.options.llmAdapter.generate(request);
+            try {
+              await this.options.auditLogger?.logLLMRequest({
+                tenantId: this.options.tenantId, requestId: this.options.requestId,
+                provider: llmProvider, model: 'unknown', tokensUsed: response.tokensUsed, success: true
+              });
+            } catch (logError) {
+              console.error(`[ERROR] Failed to log LLM request: ${logError instanceof Error ? logError.message : String(logError)}`);
+            }
+          } catch (llmError) {
+            try {
+              await this.options.auditLogger?.logLLMRequest({
+                tenantId: this.options.tenantId, requestId: this.options.requestId,
+                provider: llmProvider, model: 'unknown', success: false,
+                error: llmError instanceof Error ? llmError.message : 'Unknown error'
+              });
+            } catch (logError) {
+              console.error(`[ERROR] Failed to log LLM request error: ${logError instanceof Error ? logError.message : String(logError)}`);
+            }
+            throw llmError;
+          }
+
+          transition('validate_output');
+          const validated = this.options.outputValidator.validate(response.content);
+          if (validated.success && validated.data) {
+            llmDecision = validated.data;
+            break;
+          }
+          if (attempt === MAX_LLM_RETRIES - 1) {
+            transition('error');
+            return { status: 'error', error: `Invalid LLM output: ${(validated.errors ?? []).join('; ')}`, stateTrace };
+          }
         }
-      } catch (llmError) {
-        // P2: Log LLM request failure - best-effort, don't break agent flow
-        try {
-          await this.options.auditLogger?.logLLMRequest({
-            tenantId: this.options.tenantId,
-            requestId: this.options.requestId,
-            provider: llmProvider,
-            model: 'unknown',
-            success: false,
-            error: llmError instanceof Error ? llmError.message : 'Unknown error'
-          });
-        } catch (logError) {
-          // P2: Audit logging failures should not break agent flow
-          console.error(`[ERROR] Failed to log LLM request error: ${logError instanceof Error ? logError.message : String(logError)}`);
+
+        if (!llmDecision?.actionType) {
+          transition('error');
+          return { status: 'error', error: 'Decision missing actionType', stateTrace };
         }
-        throw llmError;
-      }
-
-      transition('validate_output');
-      const validated = this.options.outputValidator.validate(response.content);
-
-      if (!validated.success || !validated.data) {
-        transition('error');
-        return { status: 'error', error: `Invalid LLM output: ${(validated.errors ?? []).join('; ')}`, stateTrace };
-      }
-
-        decision = validated.data;
-      }
-      if (!decision.actionType) {
-        transition('error');
-        return { status: 'error', error: 'Decision missing actionType', stateTrace };
+        decision = llmDecision;
       }
 
       // P2: Log agent decision - best-effort, don't break agent flow

@@ -35,6 +35,14 @@ export interface AuditEventEntry {
   data: Record<string, unknown>;
 }
 
+export interface ActiveRunEntry {
+  requestId: string;
+  tenantId?: string;
+  startTime: number;
+  currentState: string;
+  stateTrace: string[];
+}
+
 type EventListener = (event: AuditEventEntry) => void;
 
 function resolveDataDir(): string {
@@ -46,6 +54,7 @@ function resolveDataDir(): string {
 export class ObservabilityStore {
   private runs: RunEntry[] = [];
   private events: AuditEventEntry[] = [];
+  private activeRuns: Map<string, ActiveRunEntry> = new Map();
   private readonly maxRuns: number;
   private readonly maxEvents: number;
   private eventListeners: Set<EventListener> = new Set();
@@ -104,6 +113,7 @@ export class ObservabilityStore {
   }
 
   addRun(entry: RunEntry): void {
+    this.activeRuns.delete(entry.requestId);
     this.runs.unshift(entry);
     if (this.runs.length > this.maxRuns) {
       this.runs.pop();
@@ -120,7 +130,37 @@ export class ObservabilityStore {
     this.schedulePersist();
   }
 
+  /** Emits run_start, adds to active runs. Call when a run begins. */
+  addRunStart(requestId: string, tenantId?: string): void {
+    this.activeRuns.set(requestId, {
+      requestId,
+      tenantId,
+      startTime: Date.now(),
+      currentState: 'observe',
+      stateTrace: []
+    });
+    const entry: AuditEventEntry = {
+      timestamp: Date.now(),
+      requestId,
+      tenantId,
+      eventType: 'run_start',
+      data: { requestId, tenantId }
+    };
+    this.events.unshift(entry);
+    if (this.events.length > this.maxEvents) this.events.pop();
+    this.eventListeners.forEach((fn) => fn(entry));
+    this.schedulePersist();
+  }
+
   addEvent(entry: AuditEventEntry): void {
+    if (entry.eventType === 'run_progress' && entry.requestId) {
+      const data = entry.data as { state?: string; stateTrace?: string[] };
+      const active = this.activeRuns.get(entry.requestId);
+      if (active) {
+        active.currentState = data.state ?? active.currentState;
+        active.stateTrace = data.stateTrace ?? active.stateTrace;
+      }
+    }
     this.events.unshift(entry);
     if (this.events.length > this.maxEvents) {
       this.events.pop();
@@ -131,6 +171,10 @@ export class ObservabilityStore {
 
   getRuns(): RunEntry[] {
     return [...this.runs];
+  }
+
+  getActiveRuns(): ActiveRunEntry[] {
+    return Array.from(this.activeRuns.values());
   }
 
   getEvents(): AuditEventEntry[] {
@@ -145,6 +189,7 @@ export class ObservabilityStore {
   clear(): void {
     this.runs = [];
     this.events = [];
+    this.activeRuns.clear();
     if (this.persistTimer) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
