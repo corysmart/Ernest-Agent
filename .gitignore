@@ -35,3 +35,6 @@ tests/fixtures/*.txt
 logs/
 *.log
 
+# Observability UI persisted data
+data/
+

@@ -1,0 +1,10 @@
+{
+  "observation": {
+    "state": { "user_message": "main.ts" },
+    "conversation_history": [
+      { "role": "user", "content": "Help me refactor this code" },
+      { "role": "assistant", "content": "Which file would you like me to refactor?" }
+    ]
+  },
+  "goal": { "id": "g1", "title": "Respond to user", "horizon": "short" }
+}

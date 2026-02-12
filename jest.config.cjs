@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts'],
   collectCoverageFrom: [
+    'cli/**/*.ts',
     'core/**/*.ts',
     'memory/**/*.ts',
     'world/**/*.ts',

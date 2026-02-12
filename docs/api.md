@@ -23,6 +23,7 @@ Run one agent loop. Request body:
 | observation.timestamp | number | No | Unix timestamp (ms). Default: current time |
 | observation.state | object | Yes | Key-value state (e.g., `user_message`) |
 | observation.events | string[] | No | Optional event list |
+| observation.conversation_history | array | No | Multi-turn context for follow-ups. Each entry: `{ role: "user" \| "assistant", content: string }`. Use when the agent (or Codex) asked a clarifying question and the user is responding. |
 | goal | object | No | Goal to pursue this run |
 | goal.id | string | Yes | Unique goal ID |
 | goal.title | string | Yes | Goal title |
@@ -41,7 +42,7 @@ Run one agent loop. Request body:
 
 **dryRun**
 
-- `with-llm`: Calls LLM (Codex, OpenAI, etc.), validates output, returns decision. Skips act, memory, self-model updates. Useful to see what the model would decide without running tools.
+- `with-llm`: Calls LLM (Codex, OpenAI, etc.), validates output, returns decision. Skips act, memory, self-model updates. Useful to see what the model would decide without running tools. When no explicit goal is provided but `user_message` exists, the server auto-injects a "Respond to user" goal so the LLM always responds (no need for `autoRespond`).
 - `without-llm`: Skips LLM call; uses stub decision from first candidate action. No API cost. Skips act, memory, self-model updates.
 
 **Response (200)**
