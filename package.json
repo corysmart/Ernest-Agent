@@ -11,7 +11,10 @@
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage",
     "lint": "eslint . --ext .ts",
-    "dev": "node dist/server/server.js"
+    "dev": "node dist/server/server.js",
+    "curl:health": "curl -s http://localhost:3000/health",
+    "curl:run": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once.json",
+    "curl:run-goal": "curl -s -X POST http://localhost:3000/agent/run-once -H \"Content-Type: application/json\" -d @requests/run-once-goal.json"
   },
   "dependencies": {
     "fastify": "^5.7.4",

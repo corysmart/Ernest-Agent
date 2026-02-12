@@ -128,8 +128,13 @@ npm run lint
 
 Tests use Jest with a 90% coverage target (branches, functions, lines, statements). New functionality is expected to include tests (TDD). See [docs/testing.md](docs/testing.md) for categories, coverage expectations, and how to add tests.
 
+## Quick Start
+
+See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
+
 ## Docs Index
 
+- [QUICKSTART.md](QUICKSTART.md) – Install, run, and curl the server
 - [docs/architecture.md](docs/architecture.md) – Layered architecture, module roles, control loop, design invariants
 - [docs/security.md](docs/security.md) – Trust boundaries, controls, CLI adapter caveats, operational guidance
 - [docs/threat-model.md](docs/threat-model.md) – Assets, adversaries, threats and mitigations

@@ -1,0 +1,11 @@
+{
+  "observation": {
+    "state": {
+      "user_message": "Summarize the current state"
+    }
+  },
+  "goal": {
+    "id": "g1",
+    "title": "Summarize"
+  }
+}
