@@ -63,7 +63,7 @@ export interface RunOnceContext {
   tenantId: string;
   requestId?: string;
   runId: string;
-  /** Optional abort signal. When aborted, provider should throw to cancel. */
+  /** Abort signal. When aborted (on timeout), provider should throw to cancel promptly. */
   signal?: AbortSignal;
 }
 
@@ -96,7 +96,7 @@ export interface AgentRuntimeOptions {
   maxEventQueueSize?: number;
   /** Run-level timeout in ms. On timeout, signal is aborted and run is recorded as failure. Default: 300000 (5 min). */
   runTimeoutMs?: number;
-  /** Grace period in ms after timeout to wait for provider to honor abort. Lock released after this. Default: same as runTimeoutMs. */
+  /** Grace period in ms after timeout to wait for provider to honor abort. Lock held until provider settles. Default: same as runTimeoutMs. */
   runTimeoutGraceMs?: number;
   /** Tokens to charge when run times out and never returns a result. Default: 512. */
   runTimeoutChargeTokens?: number;

@@ -563,12 +563,15 @@ describe('AgentRuntime', () => {
     })).toThrow(/runTimeoutMs/);
   });
 
-  it('releases lock after grace period when provider never completes', async () => {
+  it('holds lock until provider completes when provider ignores abort (no overlapping runs)', async () => {
     let runCount = 0;
     const provider: RunProvider = {
-      runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
+      async runOnce(): Promise<{ result: AgentLoopResult; tokensUsed?: number }> {
         runCount++;
-        return new Promise(() => {});
+        if (runCount === 1) {
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        return { result: { status: 'completed' }, tokensUsed: 100 };
       }
     };
     const runtime = new AgentRuntime({
@@ -577,7 +580,7 @@ describe('AgentRuntime', () => {
       tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
       runTimeoutMs: 50,
       runTimeoutGraceMs: 100,
-      auditLogger: { logRuntimeEvent: () => { } }
+      auditLogger: { logRuntimeEvent: () => {} }
     });
 
     runtime.start('t1');
@@ -585,18 +588,19 @@ describe('AgentRuntime', () => {
     await jest.advanceTimersByTimeAsync(60);
 
     runtime.emitEvent('t1');
-    await jest.advanceTimersByTimeAsync(200);
+    await jest.advanceTimersByTimeAsync(300);
     expect(runCount).toBe(2);
 
     runtime.stop();
   });
 
-  it('charges runTimeoutChargeTokens when run times out and never returns', async () => {
+  it('charges runTimeoutChargeTokens when run times out and never returns during grace', async () => {
     let runCount = 0;
     const provider: RunProvider = {
-      runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
+      async runOnce(): Promise<{ result: AgentLoopResult; tokensUsed?: number }> {
         runCount++;
-        return new Promise(() => {});
+        await new Promise((r) => setTimeout(r, 200));
+        return { result: { status: 'completed' }, tokensUsed: 100 };
       }
     };
     const runtime = new AgentRuntime({
@@ -610,12 +614,12 @@ describe('AgentRuntime', () => {
 
     runtime.start('t1');
     runtime.emitEvent('t1');
-    await jest.advanceTimersByTimeAsync(200);
+    await jest.advanceTimersByTimeAsync(300);
 
     runtime.emitEvent('t1');
-    await jest.advanceTimersByTimeAsync(200);
+    await jest.advanceTimersByTimeAsync(300);
     runtime.emitEvent('t1');
-    await jest.advanceTimersByTimeAsync(100);
+    await jest.advanceTimersByTimeAsync(300);
     expect(runCount).toBeLessThanOrEqual(3);
     runtime.stop();
   });

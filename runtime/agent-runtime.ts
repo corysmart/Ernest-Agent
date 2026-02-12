@@ -1,6 +1,8 @@
 /**
  * AgentRuntime orchestrates the agent run loop via heartbeat and event triggers.
  * Provides budget guardrails, circuit breaker, kill switch, and audit logging.
+ * Holds the per-tenant lock until the provider's runOnce promise settles, preventing
+ * overlapping runs even when the provider ignores AbortSignal.
  */
 
 import type { AgentLoopResult } from '../core/contracts/agent';
@@ -323,6 +325,8 @@ export class AgentRuntime {
         } else {
           this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
         }
+        // Hold lock until provider settles to prevent overlapping runs when it ignores abort
+        await runPromise.catch(() => {});
       } else {
         const lateResult = await runPromise.catch(() => null);
         this.recordRun(tenantId, now, lateResult?.tokensUsed ?? 0);
