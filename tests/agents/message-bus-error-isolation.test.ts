@@ -5,20 +5,19 @@ describe('Message Bus Error Isolation', () => {
   it('P2: isolates handler failures to prevent blocking other subscribers', async () => {
     const bus = new InMemoryMessageBus();
     const receivedMessages: AgentMessage[] = [];
-    const errors: Error[] = [];
 
     // First handler that throws
-    bus.subscribe('agent-1', (message) => {
+    bus.subscribe('agent-1', () => {
       throw new Error('Handler 1 failed');
     });
 
     // Second handler that succeeds
-    bus.subscribe('agent-1', (message) => {
-      receivedMessages.push(message);
+    bus.subscribe('agent-1', (msg) => {
+      receivedMessages.push(msg);
     });
 
     // Third handler that throws
-    bus.subscribe('agent-1', (message) => {
+    bus.subscribe('agent-1', () => {
       throw new Error('Handler 3 failed');
     });
 

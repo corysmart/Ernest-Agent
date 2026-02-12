@@ -1,4 +1,5 @@
 import { CompositeObservationAdapter, StaticObservationAdapter } from '../../runtime';
+import type { ObservationAdapter } from '../../runtime/observation-adapter';
 
 describe('CompositeObservationAdapter', () => {
   it('merges observations from multiple adapters', async () => {
@@ -21,7 +22,7 @@ describe('CompositeObservationAdapter', () => {
 
   it('continues when one adapter throws', async () => {
     const okAdapter = new StaticObservationAdapter({ a: '1' });
-    const badAdapter: import('../../runtime/observation-adapter').ObservationAdapter = {
+    const badAdapter: ObservationAdapter = {
       async getObservations() {
         throw new Error('Adapter failed');
       }

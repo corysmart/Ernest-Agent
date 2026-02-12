@@ -234,7 +234,7 @@ export class StructuredAuditLogger implements AuditLogger {
     // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
       await result;
-    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
       await result;
     }
   }
@@ -281,7 +281,7 @@ export class StructuredAuditLogger implements AuditLogger {
     // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
       await result;
-    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
       await result;
     }
   }
@@ -317,7 +317,7 @@ export class StructuredAuditLogger implements AuditLogger {
     // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
       await result;
-    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
       await result;
     }
   }
@@ -356,7 +356,7 @@ export class StructuredAuditLogger implements AuditLogger {
     // P3: Check for thenables (not just Promise instances) to catch async loggers that return thenables
     if (result instanceof Promise) {
       await result;
-    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
       await result;
     }
   }
@@ -369,7 +369,7 @@ export class StructuredAuditLogger implements AuditLogger {
     const result = this.logger.log(entry);
     if (result instanceof Promise) {
       await result;
-    } else if (result !== undefined && result !== null && typeof (result as any).then === 'function') {
+    } else if (result !== undefined && result !== null && typeof (result as { then?: unknown }).then === 'function') {
       // Handle thenables (objects with .then() method that aren't Promise instances)
       await result;
     }

@@ -1,0 +1,1 @@
+{"observation":{"state":{"user_message":"Hello, what can you do?"}},"goal":{"id":"g1","title":"Respond to user","horizon":"short","priority":1},"dryRun":"with-llm"}

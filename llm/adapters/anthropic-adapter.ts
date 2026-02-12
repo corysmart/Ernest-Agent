@@ -59,7 +59,7 @@ export class AnthropicAdapter implements LLMAdapter {
     this.costPerToken = options.costPerToken ?? 0;
     this.anthropicVersion = options.anthropicVersion ?? '2023-06-01';
     this.embedding = options.embedding;
-    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
+    this.resolveDns = (options as AnthropicAdapterOptions & { resolveDns?: boolean }).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe Anthropic base URL');

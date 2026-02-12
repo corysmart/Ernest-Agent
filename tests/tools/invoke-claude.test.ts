@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { mkdtempSync, writeFileSync, rmdirSync, mkdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmdirSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { invokeClaude } from '../../tools/invoke-claude';
@@ -180,7 +180,7 @@ describe('invoke_claude', () => {
     );
 
     try {
-      require('fs').unlinkSync(promptFilePath);
+      unlinkSync(promptFilePath);
     } catch {
       /* ignore */
     }
@@ -220,7 +220,7 @@ describe('invoke_claude', () => {
     );
 
     try {
-      require('fs').unlinkSync(pPath);
+      unlinkSync(pPath);
     } catch {
       /* ignore */
     }

@@ -1,5 +1,5 @@
 import { assertSafePath } from '../../security/path-traversal';
-import { realpathSync, mkdirSync, symlinkSync, writeFileSync, unlinkSync, rmdirSync } from 'fs';
+import { mkdirSync, symlinkSync, writeFileSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -25,13 +25,19 @@ describe('Path Traversal - Symlink Protection', () => {
     // Cleanup
     try {
       unlinkSync(symlinkPath);
-    } catch {}
+    } catch {
+      /* cleanup */
+    }
     try {
       rmdirSync(testDir);
-    } catch {}
+    } catch {
+      /* cleanup */
+    }
     try {
       rmdirSync(targetDir);
-    } catch {}
+    } catch {
+      /* cleanup */
+    }
   });
 
   it('P3: blocks path traversal via symlinks pointing outside baseDir', () => {

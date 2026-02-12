@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "core/**/*.ts",
+    "memory/**/*.ts",
+    "world/**/*.ts",
+    "self/**/*.ts",
+    "goals/**/*.ts",
+    "agents/**/*.ts",
+    "llm/**/*.ts",
+    "env/**/*.ts",
+    "runtime/**/*.ts",
+    "server/**/*.ts",
+    "security/**/*.ts",
+    "scripts/**/*.ts",
+    "tools/**/*.ts",
+    "examples/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

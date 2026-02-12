@@ -1,6 +1,7 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmdirSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { homedir } from 'os';
 import { OpenClawWorkspaceAdapter } from '../../env/openclaw-workspace-adapter';
 
 describe('OpenClawWorkspaceAdapter', () => {
@@ -81,7 +82,7 @@ describe('OpenClawWorkspaceAdapter', () => {
   });
 
   it('expands ~/ correctly for workspace path', async () => {
-    const homeDir = require('os').homedir();
+    const homeDir = homedir();
     const homeWorkspace = join(homeDir, 'openclaw-workspace-expand-test');
     try {
       mkdirSync(homeWorkspace, { recursive: true });
@@ -95,7 +96,7 @@ describe('OpenClawWorkspaceAdapter', () => {
       expect(obs.soul).toBe('Home soul');
     } finally {
       try {
-        require('fs').rmSync(homeWorkspace, { recursive: true, force: true });
+        rmSync(homeWorkspace, { recursive: true, force: true });
       } catch {
         /* ignore */
       }
@@ -120,7 +121,7 @@ describe('OpenClawWorkspaceAdapter', () => {
       expect(obs.skills).toBeUndefined();
     } finally {
       try {
-        require('fs').rmSync(outsiderPath, { recursive: true, force: true });
+        rmSync(outsiderPath, { recursive: true, force: true });
       } catch {
         /* ignore */
       }

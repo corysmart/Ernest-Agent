@@ -3,6 +3,7 @@ jest.mock('dns/promises', () => ({
 }));
 
 import { buildContainer } from '../../server/container';
+import type { LLMAdapter } from '../../core/contracts/llm';
 
 describe('buildContainer embedding configuration', () => {
   const originalEnv = { ...process.env };
@@ -37,7 +38,7 @@ describe('buildContainer embedding configuration', () => {
   it('uses Codex when no API keys are set', async () => {
     const { CodexLLMAdapter } = await import('../../llm/adapters/codex-adapter');
     const containerContext = await buildContainer();
-    const llmAdapter = containerContext.container.resolve<import('../../core/contracts/llm').LLMAdapter>('llmAdapter');
+    const llmAdapter = containerContext.container.resolve<LLMAdapter>('llmAdapter');
     expect(llmAdapter).toBeInstanceOf(CodexLLMAdapter);
     await containerContext.cleanup();
   });

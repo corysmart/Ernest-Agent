@@ -51,7 +51,6 @@ describe('invoke_codex', () => {
 
     mockedSpawn.mockReturnValue(mockChild as never);
 
-    let stdoutResolve: (chunk: Buffer) => void;
     (mockChild.stdout as { on: jest.Mock }).on.mockImplementation((ev: string, fn: (chunk: Buffer) => void) => {
       if (ev === 'data') {
         setTimeout(() => fn(Buffer.from('Done.')), 0);

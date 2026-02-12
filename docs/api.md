@@ -30,8 +30,14 @@ Run one agent loop. Request body:
 | goal.priority | number | No | Default: 1 |
 | goal.horizon | string | No | `short` or `long`. Default: `short` |
 | goal.candidateActions | array | No | Predefined candidate actions |
+| autoRespond | boolean | No | When true, inject default "Respond to user" goal if user_message exists and no explicit goal. See also AUTO_RESPOND env. Disabled by default. |
 | tenantId | string | No | Tenant scope (when authenticated) |
 | dryRun | string | No | `with-llm` or `without-llm` to skip execution |
+
+**autoRespond**
+
+- Set `autoRespond: true` in the request body, or `AUTO_RESPOND=true` in the environment, to inject a default "Respond to user" goal when `observation.state.user_message` is present and no explicit goal is provided.
+- Default behavior: agent returns idle when only user_message exists and no goal. Auto-respond is disabled by default for security.
 
 **dryRun**
 

@@ -3,13 +3,9 @@
  * Provides budget guardrails, circuit breaker, kill switch, and audit logging.
  */
 
-import type { AgentLoopResult } from '../core/contracts/agent';
 import type {
   AgentRuntimeOptions,
-  RuntimeAuditLogger,
-  TenantBudget,
-  CircuitBreakerConfig,
-  KillSwitchState
+  RuntimeAuditLogger
 } from './types';
 
 interface TenantState {

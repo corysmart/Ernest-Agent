@@ -46,7 +46,7 @@ export class LocalLLMAdapter implements LLMAdapter {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
     this.allowlist = options.allowlist;
-    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
+    this.resolveDns = (options as LocalAdapterOptions & { resolveDns?: boolean }).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl, options.allowlist ? { allowlist: options.allowlist } : undefined)) {
       throw new Error('Unsafe local model URL');

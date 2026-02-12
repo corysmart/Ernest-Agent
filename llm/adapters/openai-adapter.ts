@@ -53,7 +53,7 @@ export class OpenAIAdapter implements LLMAdapter {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.costPerToken = options.costPerToken ?? 0;
     this.organization = options.organization;
-    this.resolveDns = (options as any).resolveDns !== false; // P3: Store resolveDns flag (default true)
+    this.resolveDns = (options as OpenAIAdapterOptions & { resolveDns?: boolean }).resolveDns !== false; // P3: Store resolveDns flag (default true)
 
     if (!isSafeUrlBasic(this.baseUrl)) {
       throw new Error('Unsafe OpenAI base URL');

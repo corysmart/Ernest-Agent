@@ -7,12 +7,10 @@ import type { IMemoryManager } from '../../memory/memory-manager';
 import type { GoalStack } from '../../goals/goal-stack';
 import type { Planner } from '../../goals/planner';
 import type { PromptInjectionFilter, OutputValidator, ToolPermissionGate } from '../../core/contracts/security';
-import { StructuredAuditLogger } from '../../security/audit-logger';
 
 describe('World Model State Update', () => {
   it('P2: updates world state after actions without observations', async () => {
     const worldModel = new RuleBasedWorldModel();
-    let capturedState: any = null;
 
     const environment: Environment = {
       observe: async () => ({ timestamp: 1, state: { status: 'initial' } }),
@@ -68,7 +66,6 @@ describe('World Model State Update', () => {
 
     // Spy on updateFromResult to verify it's called and state is updated
     const updateFromResultSpy = jest.spyOn(worldModel, 'updateFromResult').mockImplementation((state, result) => {
-      capturedState = state;
       // Return updated state
       return worldModel.updateFromResult(state, result);
     });

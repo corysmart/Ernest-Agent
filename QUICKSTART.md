@@ -71,10 +71,14 @@ Sends observation plus a goal. The agent attempts to satisfy the goal.
 
 **Dry run (no side effects)**
 ```bash
-npm run curl:run-dry-with-llm     # Calls LLM, shows decision, skips tools
-npm run curl:run-dry-without-llm  # Skips LLM, uses stub decision, no API cost
+npm run curl:run-dry-with-llm      # Calls LLM, shows decision, skips tools (uses autoRespond)
+npm run curl:run-dry-with-llm-goal # Same with explicit goal
+npm run curl:run-dry-without-llm   # Skips LLM, uses stub decision, no API cost
 ```
 Add `"dryRun": "with-llm"` or `"dryRun": "without-llm"` to the request body.
+
+**Auto-respond**
+By default, requests with a `user_message` but no explicit goal return idle. To have the server inject a default "Respond to user" goal, set `AUTO_RESPOND=true` (env) or include `"autoRespond": true` in the request body.
 
 ## Customizing the Request
 
@@ -82,7 +86,8 @@ Edit the JSON payloads in `requests/`:
 
 - `requests/run-once.json` – observation only
 - `requests/run-once-goal.json` – observation and goal
-- `requests/run-once-dry-with-llm.json` – dry run with LLM (decision only, no tools)
+- `requests/run-once-dry-with-llm.json` – dry run with LLM, autoRespond (no explicit goal)
+- `requests/run-once-dry-with-llm-goal.json` – dry run with LLM and explicit goal
 - `requests/run-once-dry-without-llm.json` – dry run without LLM (stub decision, no API cost)
 
 Example observation state:

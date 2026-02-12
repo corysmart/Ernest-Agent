@@ -46,6 +46,8 @@ const runOnceSchema = z.object({
     .max(256)
     .refine((val) => !val.includes(':'), { message: 'tenantId cannot contain colons' })
     .optional(),
+  /** When true (or AUTO_RESPOND env), injects default "Respond to user" goal when user_message exists and no explicit goal. Disabled by default. */
+  autoRespond: z.boolean().optional(),
   /** with-llm: call LLM, validate, skip act/memory/self. without-llm: skip LLM, use stub, skip act/memory/self. */
   dryRun: z.enum(['with-llm', 'without-llm']).optional()
 });
@@ -125,8 +127,22 @@ export async function buildServer(options?: { logger?: boolean }) {
       return;
     }
 
-    const { observation, goal, tenantId: clientTenantId, dryRun } = parsed.data;
-    
+    const { observation, goal, tenantId: clientTenantId, dryRun, autoRespond } = parsed.data;
+
+    // Auto-inject default goal when user_message exists and no explicit goal, if auto-respond is enabled
+    let effectiveGoal = goal;
+    const userMessage = observation.state?.user_message;
+    const hasUserMessage = typeof userMessage === 'string' && userMessage.trim().length > 0;
+    const autoRespondEnabled = process.env.AUTO_RESPOND === 'true' || autoRespond === true;
+    if (!effectiveGoal && hasUserMessage && autoRespondEnabled) {
+      effectiveGoal = {
+        id: `respond-${Date.now()}`,
+        title: 'Respond to user',
+        horizon: 'short',
+        priority: 1
+      };
+    }
+
     // P1: Authenticate request and bind tenantId to authenticated principal
     const auth = authenticateRequest(request);
     
@@ -171,10 +187,10 @@ export async function buildServer(options?: { logger?: boolean }) {
     
     // Create scoped goal stack for tenant isolation (already per-request)
     const goalStack = new GoalStack();
-    if (goal) {
+    if (effectiveGoal) {
       try {
         goalStack.addGoal({
-          ...goal,
+          ...effectiveGoal,
           status: 'active',
           createdAt: Date.now(),
           updatedAt: Date.now()

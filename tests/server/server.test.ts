@@ -110,6 +110,133 @@ describe('Server', () => {
     await server.close();
   });
 
+  describe('auto-respond default goal', () => {
+    const originalAutoRespond = process.env.AUTO_RESPOND;
+
+    afterEach(() => {
+      process.env.AUTO_RESPOND = originalAutoRespond;
+    });
+
+    it('does NOT inject goal when no user_message', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.AUTO_RESPOND = 'true';
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { status: 'ok' } },
+          autoRespond: true
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('idle');
+
+      await server.close();
+    });
+
+    it('does NOT inject goal when AUTO_RESPOND false and request has no autoRespond', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      delete process.env.AUTO_RESPOND;
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { user_message: 'Hello' } }
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('idle');
+
+      await server.close();
+    });
+
+    it('injects default goal when user_message exists and autoRespond: true', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+      delete process.env.AUTO_RESPOND;
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { user_message: 'Hello' } },
+          autoRespond: true,
+          dryRun: 'with-llm'
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('dry_run');
+      expect(body.selectedGoalId).toMatch(/^respond-/);
+      expect(body.decision?.actionType).toBe('pursue_goal');
+
+      await server.close();
+    });
+
+    it('injects default goal when user_message exists and AUTO_RESPOND=true', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+      process.env.AUTO_RESPOND = 'true';
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { user_message: 'Hi there' } },
+          dryRun: 'with-llm'
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('dry_run');
+      expect(body.selectedGoalId).toMatch(/^respond-/);
+
+      await server.close();
+    });
+
+    it('explicit goal always wins over auto-respond', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+      process.env.AUTO_RESPOND = 'true';
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { user_message: 'Hello' } },
+          goal: { id: 'g-explicit', title: 'Explicit goal', horizon: 'short', priority: 1 },
+          autoRespond: true,
+          dryRun: 'with-llm'
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('dry_run');
+      expect(body.selectedGoalId).toBe('g-explicit');
+
+      await server.close();
+    });
+  });
+
   describe('P3: HTTP status codes', () => {
     it('returns 200 for successful agent execution', async () => {
       process.env.LLM_PROVIDER = 'mock';
@@ -188,7 +315,6 @@ describe('Server', () => {
       const requestIdSets: Set<string>[] = [];
       const originalLog = console.log;
       let currentRequestIds: string[] = [];
-      let requestCount = 0;
 
       console.log = jest.fn((message: string) => {
         if (message.startsWith('[AUDIT]')) {
