@@ -93,16 +93,11 @@ describe('CodexLLMAdapter', () => {
 
   it('handles spawn error event', async () => {
     const mockChild = createMockChild();
-    let closeFn: () => void;
     mockChild.on.mockImplementation((ev: string, fn: (err: Error) => void) => {
       if (ev === 'error') setImmediate(() => fn(new Error('spawn ENOENT')));
-      if (ev === 'close') closeFn = fn as () => void;
       return mockChild;
     });
-    mockChild.once.mockImplementation((ev: string, fn: () => void) => {
-      if (ev === 'close') closeFn = fn;
-      return mockChild;
-    });
+    mockChild.once.mockImplementation((_ev: string, _fn: () => void) => mockChild);
     mockedSpawn.mockReturnValue(mockChild as never);
 
     const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });

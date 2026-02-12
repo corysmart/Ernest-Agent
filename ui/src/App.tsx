@@ -119,6 +119,7 @@ function App() {
     }
   }, []);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- data fetch on tab change; setState runs in fetch .then callbacks */
   useEffect(() => {
     if (tab === 'runs') {
       fetchRuns();
@@ -188,7 +189,7 @@ function App() {
       }
     };
     return () => ev.close();
-  }, []);
+  }, [fetchActiveRuns]);
 
   const sanitizedHtml = selectedDoc && docContent
     ? DOMPurify.sanitize(marked.parse(docContent) as string)

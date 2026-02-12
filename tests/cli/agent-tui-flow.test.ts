@@ -9,15 +9,21 @@ import { extractAssistantContent, type RunOnceResponse } from '../../cli/agent-t
 describe('agent-tui flow (e2e)', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let baseUrl: string;
+  let canListen = true;
 
   beforeAll(async () => {
     process.env.LLM_PROVIDER = 'mock';
     process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{"response":"I need more details: which file, and what error?"},"confidence":0.85,"reasoning":"Clarifying"}';
     server = await buildServer({ logger: false });
-    await server.listen({ port: 0, host: '127.0.0.1' });
-    const addr = server.server.address();
-    const port = typeof addr === 'object' && addr && 'port' in addr ? addr.port : 0;
-    baseUrl = `http://127.0.0.1:${port}`;
+    try {
+      await server.listen({ port: 0, host: '127.0.0.1' });
+      const addr = server.server.address();
+      const port = typeof addr === 'object' && addr && 'port' in addr ? addr.port : 0;
+      baseUrl = `http://127.0.0.1:${port}`;
+    } catch (err) {
+      canListen = false;
+      if (err instanceof Error && !err.message.includes('EADDRINUSE') && !err.message.includes('EPERM')) throw err;
+    }
   });
 
   afterAll(async () => {
@@ -25,6 +31,7 @@ describe('agent-tui flow (e2e)', () => {
   });
 
   it('dry run with underspecified prompt returns clarifying question, then follow-up succeeds', async () => {
+    if (!canListen) return;
     // Step 1: Dry run with "Fix the bug" (no explicit goal -> auto-inject Respond to user)
     const run1 = await fetch(`${baseUrl}/agent/run-once`, {
       method: 'POST',
