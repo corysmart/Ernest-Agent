@@ -487,6 +487,100 @@ describe('AgentRuntime', () => {
     runtime.stop();
   });
 
+  it('rejects invalid maxEventQueueSize in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      maxEventQueueSize: 0
+    })).toThrow(/maxEventQueueSize.*>= 1/);
+
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      maxEventQueueSize: -1
+    })).toThrow(/maxEventQueueSize/);
+
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      maxEventQueueSize: NaN
+    })).toThrow(/maxEventQueueSize/);
+  });
+
+  it('rejects invalid runTimeoutMs in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutMs: 0
+    })).toThrow(/runTimeoutMs/);
+
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutMs: -1
+    })).toThrow(/runTimeoutMs/);
+  });
+
+  it('records failure and releases lock on run timeout', async () => {
+    let runCount = 0;
+    const logged: string[] = [];
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        if (runCount === 1) {
+          await new Promise(() => {});
+        }
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      runTimeoutMs: 100,
+      auditLogger: { logRuntimeEvent: (ctx) => { logged.push(ctx.event); } }
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+
+    await jest.advanceTimersByTimeAsync(200);
+    expect(logged).toContain('run_error');
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(100);
+    expect(runCount).toBe(2);
+
+    runtime.stop();
+  });
+
+  it('emitEvent removes all duplicate tenantIds', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      maxEventQueueSize: 10
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(runCount).toBeLessThanOrEqual(2);
+    runtime.stop();
+  });
+
   it('per-tenant serialization prevents budget bypass with concurrent runs', async () => {
     let concurrency = 0;
     let maxConcurrency = 0;

@@ -31,22 +31,40 @@ export class AgentRuntime {
       | 'timers'
       | 'generateRunId'
       | 'maxEventQueueSize'
+      | 'runTimeoutMs'
     >
   > &
     Pick<
       AgentRuntimeOptions,
-      'tenantBudgets' | 'circuitBreakerConfig' | 'killSwitch' | 'auditLogger'
+      'tenantBudgets' | 'circuitBreakerConfig' | 'killSwitch' | 'auditLogger' | 'tenantIdleEvictionMs'
     >;
 
   private heartbeatHandle: ReturnType<typeof setInterval> | null = null;
   private readonly tenantStates = new Map<string, TenantState>();
   private readonly tenantLocks = new Map<string, Promise<void>>();
   private readonly pendingHeartbeatRuns = new Set<string>();
+  private readonly tenantLastActivityAt = new Map<string, number>();
   private eventQueue: string[] = [];
   private processingEvents = false;
   private running = false;
 
   constructor(options: AgentRuntimeOptions) {
+    const rawMax = options.maxEventQueueSize ?? 100;
+    const maxEventQueueSize = Math.floor(Number(rawMax));
+    if (!Number.isFinite(maxEventQueueSize) || maxEventQueueSize < 1) {
+      throw new Error(
+        `maxEventQueueSize must be a finite integer >= 1. Got: ${options.maxEventQueueSize}`
+      );
+    }
+
+    const rawTimeout = options.runTimeoutMs ?? 300_000;
+    const runTimeoutMs = Math.floor(Number(rawTimeout));
+    if (!Number.isFinite(runTimeoutMs) || runTimeoutMs < 1) {
+      throw new Error(
+        `runTimeoutMs must be a finite positive number. Got: ${options.runTimeoutMs}`
+      );
+    }
+
     this.options = {
       ...options,
       getTime: options.getTime ?? (() => Date.now()),
@@ -58,7 +76,8 @@ export class AgentRuntime {
         const hex = (Date.now().toString(36) + Math.random().toString(36).slice(2));
         return `run-${tenantId}-${hex}`;
       }),
-      maxEventQueueSize: options.maxEventQueueSize ?? 100
+      maxEventQueueSize,
+      runTimeoutMs
     };
   }
 
@@ -97,10 +116,7 @@ export class AgentRuntime {
     if (!this.running) {
       return;
     }
-    const idx = this.eventQueue.indexOf(tenantId);
-    if (idx !== -1) {
-      this.eventQueue.splice(idx, 1);
-    }
+    this.eventQueue = this.eventQueue.filter((id) => id !== tenantId);
     while (this.eventQueue.length >= this.options.maxEventQueueSize) {
       this.eventQueue.shift();
     }
@@ -132,6 +148,7 @@ export class AgentRuntime {
     if (this.pendingHeartbeatRuns.has(tenantId)) {
       return;
     }
+    this.touchTenant(tenantId);
     this.pendingHeartbeatRuns.add(tenantId);
     this.executeRun(tenantId)
       .catch(() => {})
@@ -160,6 +177,7 @@ export class AgentRuntime {
   }
 
   private async doExecuteRun(tenantId: string): Promise<void> {
+    this.touchTenant(tenantId);
     const now = this.options.getTime();
 
     if (this.options.killSwitch?.enabled) {
@@ -181,11 +199,20 @@ export class AgentRuntime {
 
     this.logAudit(tenantId, runId, 'run_started');
 
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const runPromise = this.options.runProvider.runOnce({ tenantId, runId });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = globalThis.setTimeout(
+        () => reject(new Error(`Run timeout after ${this.options.runTimeoutMs}ms`)),
+        this.options.runTimeoutMs
+      );
+    });
+
     try {
-      const { result, tokensUsed } = await this.options.runProvider.runOnce({
-        tenantId,
-        runId
-      });
+      const { result, tokensUsed } = await Promise.race([runPromise, timeoutPromise]);
+      if (timeoutId != null) {
+        clearTimeout(timeoutId);
+      }
 
       this.recordRun(tenantId, now, tokensUsed ?? 0);
       if (result.status === 'error') {
@@ -199,6 +226,9 @@ export class AgentRuntime {
         tokensUsed: tokensUsed ?? 0
       });
     } catch (error) {
+      if (timeoutId != null) {
+        clearTimeout(timeoutId);
+      }
       this.recordRun(tenantId, now, 0);
       this.recordFailure(tenantId, now);
       this.logAudit(tenantId, runId, 'run_error', {
@@ -249,9 +279,31 @@ export class AgentRuntime {
     return true;
   }
 
+  private touchTenant(tenantId: string): void {
+    this.tenantLastActivityAt.set(tenantId, this.options.getTime());
+  }
+
+  private evictIdleTenants(): void {
+    const ttl = this.options.tenantIdleEvictionMs;
+    if (ttl == null || ttl <= 0) {
+      return;
+    }
+    const now = this.options.getTime();
+    const cutoff = now - ttl;
+    for (const [id, at] of this.tenantLastActivityAt.entries()) {
+      if (at < cutoff && !this.pendingHeartbeatRuns.has(id)) {
+        this.tenantStates.delete(id);
+        this.tenantLocks.delete(id);
+        this.tenantLastActivityAt.delete(id);
+      }
+    }
+  }
+
   private getTenantState(tenantId: string): TenantState {
+    this.touchTenant(tenantId);
     let state = this.tenantStates.get(tenantId);
     if (!state) {
+      this.evictIdleTenants();
       state = {
         runTimestamps: [],
         tokenTimestamps: [],

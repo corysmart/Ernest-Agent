@@ -85,8 +85,12 @@ export interface AgentRuntimeOptions {
   timers?: Pick<typeof globalThis, 'setInterval' | 'clearInterval'>;
   /** Optional run ID generator. Default: uuid-based. */
   generateRunId?: (tenantId: string) => string;
-  /** Max event queue size. When exceeded, oldest events are dropped. Default: 100. */
+  /** Max event queue size. When exceeded, oldest events are dropped. Default: 100. Must be >= 1. */
   maxEventQueueSize?: number;
+  /** Run-level timeout in ms. On timeout, run is recorded as failure and lock is released. Default: 300000 (5 min). */
+  runTimeoutMs?: number;
+  /** TTL in ms for idle tenant eviction. Tenants inactive longer than this are removed from maps. No eviction if unset. */
+  tenantIdleEvictionMs?: number;
 }
 
 /** Logger for runtime audit events (no dependency on StructuredAuditLogger). */
