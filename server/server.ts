@@ -1,27 +1,10 @@
 import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { buildContainer } from './container';
-import { CognitiveAgent } from '../core/agent/cognitive-agent';
-import { RequestEnvironment } from './request-environment';
-import { OpenClawWorkspaceAdapter } from '../env/openclaw-workspace-adapter';
-import { CompositeObservationAdapter } from '../runtime/composite-observation-adapter';
-import { ObservationNormalizer } from '../runtime/observation-normalizer';
-import { RequestObservationAdapter } from './request-observation-adapter';
+import { executeAgentRun } from './execute-agent-run';
 import { assertSafeObject } from '../security/validation';
-import { RuleBasedWorldModel } from '../world/world-model';
-import { SelfModel } from '../self/self-model';
-import { GoalStack } from '../goals/goal-stack';
-import { HeuristicPlanner } from '../goals/planner';
-import type { MemoryManager } from '../memory/memory-manager';
-import { ScopedMemoryManager } from '../memory/scoped-memory-manager';
-import { StructuredAuditLogger } from '../security/audit-logger';
 import { ObservabilityStore } from './observability-store';
-import { createObservabilityAuditLogger } from './observability-audit-forwarder';
 import { registerObservabilityRoutes } from './observability-routes';
-import type { LLMAdapter } from '../core/contracts/llm';
-import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/security';
-import type { AgentDecision } from '../core/contracts/agent';
-import type { ToolPermissionGate } from '../core/contracts/security';
 
 const conversationEntrySchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -123,6 +106,26 @@ function getRunOnceTimeoutMs(): number {
   return Math.floor(raw);
 }
 
+const DEFAULT_MAX_MULTI_ACT_STEPS = 10;
+
+function getMaxMultiActSteps(): number {
+  const raw = Number(process.env.MAX_MULTI_ACT_STEPS ?? DEFAULT_MAX_MULTI_ACT_STEPS);
+  if (!Number.isFinite(raw) || raw < 1) {
+    return 1;
+  }
+  return Math.min(50, Math.floor(raw)); // Cap at 50
+}
+
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 300_000; // 5 min
+
+function getHeartbeatIntervalMs(): number {
+  const raw = Number(process.env.HEARTBEAT_INTERVAL_MS ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
+  if (!Number.isFinite(raw) || raw < 1) {
+    return DEFAULT_HEARTBEAT_INTERVAL_MS;
+  }
+  return Math.floor(raw);
+}
+
 export async function buildServer(options?: { logger?: boolean }) {
   const requestTimeoutMs = getRunOnceTimeoutMs();
   const fastify = Fastify({
@@ -132,8 +135,50 @@ export async function buildServer(options?: { logger?: boolean }) {
   const containerContext = await buildContainer();
   const { container, rateLimiter, toolRunner } = containerContext;
   
+  let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+  let heartbeatRunning = false;
+
+  const heartbeatEnabled = process.env.HEARTBEAT_ENABLED === 'true' || process.env.HEARTBEAT_ENABLED === '1';
+
+  if (heartbeatEnabled) {
+    fastify.addHook('onReady', async () => {
+      const intervalMs = getHeartbeatIntervalMs();
+      heartbeatIntervalId = setInterval(async () => {
+        if (heartbeatRunning) return;
+        heartbeatRunning = true;
+        const requestId = `heartbeat-${Date.now()}`;
+        const goal = {
+          id: requestId,
+          title: 'Process heartbeat',
+          horizon: 'short' as const,
+          priority: 1
+        };
+        try {
+          await executeAgentRun(container, toolRunner, obsStore, {
+            observation: { timestamp: Date.now(), state: {} },
+            goal,
+            tenantId: undefined,
+            requestId,
+            dryRun: false,
+            runTimeoutMs: getRunOnceTimeoutMs(),
+            maxMultiActSteps: getMaxMultiActSteps()
+          });
+        } catch (err) {
+          fastify.log?.error?.({ err }, 'Heartbeat run failed');
+        } finally {
+          heartbeatRunning = false;
+        }
+      }, intervalMs);
+      fastify.log?.info?.({ intervalMs }, 'Heartbeat trigger started');
+    });
+  }
+
   // Register cleanup on server close
   fastify.addHook('onClose', async () => {
+    if (heartbeatIntervalId) {
+      clearInterval(heartbeatIntervalId);
+      heartbeatIntervalId = null;
+    }
     await containerContext.cleanup();
   });
 
@@ -216,98 +261,28 @@ export async function buildServer(options?: { logger?: boolean }) {
     const runStartMs = Date.now();
     const requestId = `req-${runStartMs}-${Math.random().toString(36).substring(7)}`;
     
-    // Create scoped memory manager for tenant isolation
-    // Use tenantId as scope if authenticated, otherwise use requestId
-    const baseMemoryManager = container.resolve<MemoryManager>('memoryManager');
-    const memoryScope = tenantId ?? requestId;
-    const persistMemory = Boolean(tenantId); // Persist memory only for authenticated tenants
-    const scopedMemoryManager = new ScopedMemoryManager(baseMemoryManager, memoryScope, persistMemory);
-    
-    // Create audit logger for this request (forward to obs store when UI enabled)
-    const baseLogger = obsStore ? createObservabilityAuditLogger(obsStore) : undefined;
-    const auditLogger = new StructuredAuditLogger(baseLogger);
-    
-    // Create scoped goal stack for tenant isolation (already per-request)
-    const goalStack = new GoalStack();
-    if (effectiveGoal) {
-      try {
-        goalStack.addGoal({
-          ...effectiveGoal,
-          status: 'active',
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        });
-      } catch (error) {
-        reply.code(409).send({ error: error instanceof Error ? error.message : 'Goal conflict' });
+    let runResult;
+    try {
+      runResult = await executeAgentRun(container, toolRunner, obsStore, {
+        observation: {
+          timestamp: observation.timestamp,
+          state: observation.state ?? {},
+          events: observation.events,
+          conversation_history: observation.conversation_history
+        },
+        goal: effectiveGoal,
+        tenantId,
+        requestId,
+        dryRun: dryRun ?? false,
+        runTimeoutMs: getRunOnceTimeoutMs(),
+        maxMultiActSteps: getMaxMultiActSteps()
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Goal conflict')) {
+        reply.code(409).send({ error: err.message });
         return;
       }
-    }
-
-    const openclaw = new OpenClawWorkspaceAdapter({
-      workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace',
-      includeDailyMemory: true
-    });
-    const requestAdapter = new RequestObservationAdapter({
-      timestamp: observation.timestamp ?? Date.now(),
-      state: observation.state ?? {},
-      events: observation.events,
-      conversation_history: observation.conversation_history
-    });
-    const composite = new CompositeObservationAdapter([openclaw, requestAdapter]);
-    const rawObs = await composite.getObservations();
-    const normalizer = new ObservationNormalizer();
-    const normalizedObs = normalizer.normalize(rawObs);
-    normalizedObs.timestamp = observation.timestamp ?? Date.now();
-    if (observation.conversation_history) {
-      normalizedObs.conversation_history = observation.conversation_history;
-    }
-
-    const environment = new RequestEnvironment(normalizedObs, toolRunner, {
-      auditLogger,
-      tenantId, // P3: Propagate authenticated tenantId to audit logging
-      requestId
-    });
-
-    const worldModel = new RuleBasedWorldModel();
-    const selfModel = new SelfModel();
-    const planner = new HeuristicPlanner(worldModel);
-
-    const agent = new CognitiveAgent({
-      environment,
-      memoryManager: scopedMemoryManager,
-      worldModel,
-      selfModel,
-      goalStack,
-      planner,
-      llmAdapter: container.resolve<LLMAdapter>('llmAdapter'),
-      promptFilter: container.resolve<PromptInjectionFilter>('promptFilter'),
-      outputValidator: container.resolve<OutputValidator<AgentDecision>>('outputValidator'),
-      permissionGate: container.resolve<ToolPermissionGate>('permissionGate'),
-      auditLogger,
-      tenantId, // P3: Propagate authenticated tenantId to audit logging
-      requestId,
-      dryRun: dryRun ?? false
-    });
-
-    if (obsStore) {
-      obsStore.addRunStart(requestId, tenantId);
-    }
-
-    const timeoutMs = getRunOnceTimeoutMs();
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(
-        () => reject(new Error(`Run timed out after ${timeoutMs / 1000}s`)),
-        timeoutMs
-      );
-    });
-    let result;
-    try {
-      result = await Promise.race([agent.runOnce(), timeoutPromise]);
-    } catch (err) {
-      if (timeoutId) clearTimeout(timeoutId);
-      const isTimeout = err instanceof Error && err.message.includes('timed out');
-      if (isTimeout) {
+      if (err instanceof Error && err.message.includes('timed out')) {
         reply.code(504).send({
           status: 'error',
           error: err.message,
@@ -316,31 +291,9 @@ export async function buildServer(options?: { logger?: boolean }) {
         return;
       }
       throw err;
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
     }
 
-    if (obsStore) {
-      const observationKeys = observation.state && typeof observation.state === 'object'
-        ? Object.keys(observation.state)
-        : [];
-      obsStore.addRun({
-        requestId,
-        tenantId,
-        timestamp: Date.now(),
-        status: result.status,
-        selectedGoalId: result.selectedGoalId,
-        error: result.error,
-        decision: result.decision,
-        actionResult: result.actionResult,
-        stateTrace: result.stateTrace,
-        observationSummary: observationKeys,
-        dryRunMode: result.dryRunMode,
-        durationMs: Date.now() - runStartMs
-      });
-    }
-
-    const durationMs = Date.now() - runStartMs;
+    const { result, durationMs } = runResult;
     const response = { ...result, durationMs };
 
     // Return appropriate HTTP status codes based on agent result

@@ -16,6 +16,15 @@ import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { pursueGoal } from './pursue-goal';
 import { invokeCodex } from './invoke-codex';
 import { invokeClaude } from './invoke-claude';
+import { sendEmail } from './send-email';
+import { scheduleTask } from './schedule-task';
+import { getRecentRuns } from './get-recent-runs';
+import { createTestEmailAccount } from './create-test-email-account';
+import { saveEmailConfigTool } from './save-email-config';
+import { readFile } from './read-file';
+import { listDir } from './list-dir';
+import { runCommand } from './run-command';
+import { writeFile } from './write-file';
 
 export interface ToolDefinition {
   name: string;
@@ -125,6 +134,57 @@ export function initializeToolRegistry(): void {
     name: 'invoke_claude',
     handler: invokeClaude,
     description: 'Run Claude Code CLI with a prompt. Uses Pro/Max/Teams subscription.'
+  });
+
+  toolRegistry.register({
+    name: 'send_email',
+    handler: sendEmail,
+    description: 'Send an email. Requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM.'
+  });
+
+  toolRegistry.register({
+    name: 'schedule_task',
+    handler: scheduleTask,
+    description: 'Register a recurring task with a cron schedule. Persisted to SCHEDULED_TASKS_PATH. A scheduler must run to execute tasks.'
+  });
+
+  toolRegistry.register({
+    name: 'get_recent_runs',
+    handler: getRecentRuns,
+    description: 'Get summary of recent agent runs (from observability store when OBS_UI_ENABLED).'
+  });
+
+  toolRegistry.register({
+    name: 'create_test_email_account',
+    handler: createTestEmailAccount,
+    description: 'Create a disposable test email account (Ethereal). Saves credentials so send_email works. For testing only—emails do not reach real inboxes.'
+  });
+
+  toolRegistry.register({
+    name: 'save_email_config',
+    handler: saveEmailConfigTool,
+    description: 'Save SMTP credentials to config so send_email works. Use when user provides host, port, user, pass. Never overwrites .env.'
+  });
+
+  toolRegistry.register({
+    name: 'read_file',
+    handler: readFile,
+    description: 'Read file contents from workspace. Path relative to FILE_WORKSPACE_ROOT or CODEX_CWD.'
+  });
+  toolRegistry.register({
+    name: 'list_dir',
+    handler: listDir,
+    description: 'List directory contents. Path relative to workspace root.'
+  });
+  toolRegistry.register({
+    name: 'run_command',
+    handler: runCommand,
+    description: 'Run a shell command in the workspace. Use for npm test, curl, etc.'
+  });
+  toolRegistry.register({
+    name: 'write_file',
+    handler: writeFile,
+    description: 'Write content to a file. Use to update HEARTBEAT.md or task state.'
   });
 
   // Add more tools here as they are created

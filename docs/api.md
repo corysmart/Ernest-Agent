@@ -110,6 +110,10 @@ Per-IP rate limits apply. 429 is returned when exceeded.
 
 Single run-once requests can take up to 10 minutes for complex tasks. Set `RUN_ONCE_TIMEOUT_MS` (default `600000`) to override. The server enforces this limit; the TUI client uses the same value for its fetch timeout. On timeout, the server returns 504 with `{"status":"error","error":"Run timed out after Ns"}`.
 
+**Heartbeat (autonomous runs)**
+
+When `HEARTBEAT_ENABLED=true`, the server runs the agent periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented—a new tick skips if the previous one is still running. See `docs/autonomous-execution-plan.md` for details.
+
 ### Observability UI (when OBS_UI_ENABLED)
 
 When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`).
@@ -132,3 +136,21 @@ When `API_KEY` is set, `/ui` routes require `Authorization: ApiKey <key>` or `Au
 | `/ui/docs/:id` | GET | Markdown content for doc by id |
 
 **OBS_UI_MD_ROOTS**: Comma-separated file/directory paths for markdown. Default: `README.md,docs/`. Supports `~/` expansion for paths outside the repo. Roots can be under the repo or external; path traversal is blocked—only files under configured roots are readable. Only `.md` files are served.
+
+### Email and Scheduling (tools)
+
+When the agent uses `send_email` or `schedule_task`:
+
+**send_email** – Uses env vars or `data/email-config.json` (see below).
+
+Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
+
+**create_test_email_account** – Creates Ethereal test account and saves config. For testing only.
+
+**save_email_config** – Saves SMTP credentials to `EMAIL_CONFIG_PATH` (default: `data/email-config.json`). Agent can persist credentials when user provides them. Never writes to `.env`.
+
+**schedule_task** – Stores tasks to a file for a scheduler to consume:
+
+- `SCHEDULED_TASKS_PATH` – Path to JSON file (default: `data/scheduled-tasks.json`)
+
+Tasks are persisted but not executed until a scheduler reads the file and triggers runs. See [tools/README.md](../tools/README.md) for tool usage.

@@ -27,6 +27,8 @@ interface CognitiveAgentOptions {
   requestId?: string;
   /** When set, skips act/memory/self-model. with-llm: calls LLM; without-llm: skips LLM, uses stub decision. */
   dryRun?: false | DryRunMode;
+  /** Max acts per run when multi-act enabled. Default 1 (single act). Set via MAX_MULTI_ACT_STEPS. */
+  multiActMaxSteps?: number;
 }
 
 export class CognitiveAgent {
@@ -138,6 +140,7 @@ export class CognitiveAgent {
         };
       } else {
         transition('query_llm');
+        const multiActMaxSteps = Math.max(1, this.options.multiActMaxSteps ?? 1);
         const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
         const systemPrompt = buildSystemPrompt({
           memoryContext,
@@ -146,7 +149,8 @@ export class CognitiveAgent {
           goal,
           plan,
           promptFilter: this.options.promptFilter,
-          allowedActionTypes: allowedTypes ?? undefined
+          allowedActionTypes: allowedTypes ?? undefined,
+          multiActHint: multiActMaxSteps > 1
         });
         const llmProvider = this.options.llmAdapter.constructor.name.replace('Adapter', '').toLowerCase();
         const MAX_LLM_RETRIES = 2;
@@ -226,49 +230,98 @@ export class CognitiveAgent {
         console.error(`[ERROR] Failed to log agent decision: ${logError instanceof Error ? logError.message : String(logError)}`);
       }
 
-      const action = { type: decision.actionType, payload: decision.actionPayload };
-      const permission = this.options.permissionGate.isAllowed(action, { goalId: goal.id });
-      if (!permission.allowed) {
-        transition('error');
-        return { status: 'error', error: permission.reason ?? 'Action not permitted', stateTrace };
-      }
+      const multiActMaxSteps = Math.max(1, this.options.multiActMaxSteps ?? 1);
+      const actionHistory: Array<{ action: { type: string; payload?: Record<string, unknown> }; result: Awaited<ReturnType<Environment['act']>> }> = [];
+      let lastDecision: AgentDecision = decision;
+      let lastActionResult: Awaited<ReturnType<Environment['act']>> | null = null;
 
-      if (dryRun) {
-        transition('complete');
-        return {
-          status: 'dry_run',
-          decision,
-          actionResult: { success: true, skipped: true },
-          selectedGoalId: goal.id,
-          stateTrace,
-          dryRunMode: dryRun
+      for (let step = 0; step < multiActMaxSteps; step += 1) {
+        const action = { type: lastDecision.actionType, payload: lastDecision.actionPayload };
+        const permission = this.options.permissionGate.isAllowed(action, { goalId: goal.id });
+        if (!permission.allowed) {
+          transition('error');
+          return { status: 'error', error: permission.reason ?? 'Action not permitted', stateTrace };
+        }
+
+        if (action.type === 'complete_run') {
+          break;
+        }
+
+        if (dryRun) {
+          transition('complete');
+          return {
+            status: 'dry_run',
+            decision: lastDecision,
+            actionResult: { success: true, skipped: true },
+            selectedGoalId: goal.id,
+            stateTrace,
+            dryRunMode: dryRun
+          };
+        }
+
+        transition('act');
+        const actionResult = await this.options.environment.act(action);
+        lastActionResult = actionResult;
+        actionHistory.push({ action, result: actionResult });
+
+        worldState = this.options.worldModel.updateFromResult(worldState, {
+          success: actionResult.success,
+          observation: actionResult.observation
+        });
+
+        if (step + 1 >= multiActMaxSteps) break;
+
+        const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
+        const historyForPrompt = actionHistory.map((h) => ({
+          action: h.action.type,
+          payload: h.action.payload,
+          success: h.result.success,
+          error: h.result.error,
+          outputs: (h.result as { outputs?: unknown }).outputs
+        }));
+        const continuationPrompt = `${sanitized.sanitized}\n\nAction history:\n${JSON.stringify(historyForPrompt, null, 0)}\n\nWhat is your next action? Use complete_run when done.`;
+        const systemPrompt = buildSystemPrompt({
+          memoryContext,
+          worldState,
+          selfSnapshot,
+          goal,
+          plan,
+          promptFilter: this.options.promptFilter,
+          allowedActionTypes: allowedTypes ?? undefined,
+          multiActHint: true
+        });
+        const request: PromptRequest = {
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: continuationPrompt }],
+          maxTokens: 512,
+          temperature: 0.2
         };
+        const response = await this.options.llmAdapter.generate(request);
+        const validated = this.options.outputValidator.validate(response.content);
+        if (!validated.success || !validated.data?.actionType) {
+          break;
+        }
+        lastDecision = validated.data;
       }
 
-      transition('act');
-      const actionResult = await this.options.environment.act(action);
-      // P2: Assign returned state to keep world model synchronized
-      // This ensures the world model state is updated even when no observation is provided
-      worldState = this.options.worldModel.updateFromResult(worldState, { success: actionResult.success, observation: actionResult.observation });
-
+      const finalResult = lastActionResult ?? { success: true };
       transition('store_results');
-      await this.options.memoryManager.addEpisodic({
-        id: randomUUID(),
-        type: 'episodic',
-        content: `Action ${action.type} => ${actionResult.success ? 'success' : 'failure'}`,
-        createdAt: Date.now(),
-        eventType: 'action_result'
-      });
-
+      for (const { action: a, result: r } of actionHistory) {
+        await this.options.memoryManager.addEpisodic({
+          id: randomUUID(),
+          type: 'episodic',
+          content: `Action ${a.type} => ${r.success ? 'success' : 'failure'}`,
+          createdAt: Date.now(),
+          eventType: 'action_result'
+        });
+      }
       transition('learn');
-      this.options.selfModel.recordOutcome(actionResult.success);
-      this.options.goalStack.updateStatus(goal.id, actionResult.success ? 'completed' : 'failed');
-
+      this.options.selfModel.recordOutcome(finalResult.success);
+      this.options.goalStack.updateStatus(goal.id, finalResult.success ? 'completed' : 'failed');
       transition('complete');
       return {
         status: 'completed',
-        decision,
-        actionResult: { success: actionResult.success, error: actionResult.error },
+        decision: lastDecision,
+        actionResult: { success: finalResult.success, error: finalResult.error },
         selectedGoalId: goal.id,
         stateTrace
       };
@@ -303,6 +356,7 @@ function buildSystemPrompt(args: {
   plan?: { steps: Array<{ description: string }> };
   promptFilter: PromptInjectionFilter;
   allowedActionTypes?: string[];
+  multiActHint?: boolean;
 }): string {
   // P2: Sanitize goal/memory content before including in system prompt
   // This prevents prompt injection via user-supplied goals or poisoned memory
@@ -319,6 +373,9 @@ function buildSystemPrompt(args: {
 
   if (args.allowedActionTypes && args.allowedActionTypes.length > 0) {
     parts.push(`actionType must be exactly one of: ${args.allowedActionTypes.join(', ')}.`);
+  }
+  if (args.multiActHint) {
+    parts.push('You may take multiple actions in sequence. Use actionType "complete_run" with empty actionPayload when finished.');
   }
 
   // Include plan if available
