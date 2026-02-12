@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { homedir } from 'os';
 import { OpenClawWorkspaceAdapter } from '../../env/openclaw-workspace-adapter';
 
 describe('OpenClawWorkspaceAdapter', () => {
@@ -82,30 +81,21 @@ describe('OpenClawWorkspaceAdapter', () => {
   });
 
   it('expands ~/ correctly for workspace path', async () => {
-    // mkdir under homedir may be denied in sandbox; skip if so
-    const homeDir = homedir();
-    const homeWorkspace = join(homeDir, 'openclaw-workspace-expand-test');
-    try {
-      mkdirSync(homeWorkspace, { recursive: true });
-    } catch {
-      return; // Skip when sandbox denies mkdir under homedir
-    }
-    try {
-      writeFileSync(join(homeWorkspace, 'SOUL.md'), 'Home soul');
+    // Use tmpdir via getHomedir so the test is hermetic (no writes under real homedir)
+    const fakeHome = mkdtempSync(join(tmpdir(), 'openclaw-fake-home-'));
+    const homeWorkspace = join(fakeHome, 'openclaw-workspace-expand-test');
+    mkdirSync(homeWorkspace, { recursive: true });
+    writeFileSync(join(homeWorkspace, 'SOUL.md'), 'Home soul');
 
-      const adapter = new OpenClawWorkspaceAdapter({
-        workspaceRoot: '~/openclaw-workspace-expand-test'
-      });
-      const obs = await adapter.getObservations();
+    const adapter = new OpenClawWorkspaceAdapter({
+      workspaceRoot: '~/openclaw-workspace-expand-test',
+      getHomedir: () => fakeHome
+    });
+    const obs = await adapter.getObservations();
 
-      expect(obs.soul).toBe('Home soul');
-    } finally {
-      try {
-        rmSync(homeWorkspace, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-    }
+    expect(obs.soul).toBe('Home soul');
+
+    rmSync(fakeHome, { recursive: true, force: true });
   });
 
   it('skips relative extraSkillDirs that escape workspace', async () => {

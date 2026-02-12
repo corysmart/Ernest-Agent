@@ -44,14 +44,17 @@ export interface OpenClawWorkspaceAdapterOptions {
   maxFileBytes?: number;
   /** Optional clock for deterministic tests. */
   getDate?: () => string;
+  /** Optional homedir for ~ expansion. Used in tests to avoid writing under real homedir. */
+  getHomedir?: () => string;
 }
 
-function expandPath(p: string): string {
+function expandPath(p: string, homeDir?: string): string {
+  const home = homeDir ?? homedir();
   if (p.startsWith('~/')) {
-    return join(homedir(), p.slice(2));
+    return join(home, p.slice(2));
   }
   if (p === '~') {
-    return homedir();
+    return home;
   }
   return p;
 }
@@ -72,10 +75,12 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
   private readonly extraSkillDirs: string[];
   private readonly maxFileBytes: number;
   private readonly getDate: () => string;
+  private readonly getHomedir: () => string;
 
   constructor(options: OpenClawWorkspaceAdapterOptions = {}) {
     const root = options.workspaceRoot ?? '~/.openclaw/workspace';
-    this.workspaceRoot = expandPath(root);
+    this.getHomedir = options.getHomedir ?? (() => homedir());
+    this.workspaceRoot = expandPath(root, this.getHomedir());
     this.includeDailyMemory = options.includeDailyMemory ?? true;
     this.includeSkills = options.includeSkills ?? false;
     this.extraSkillDirs = options.extraSkillDirs ?? [];
@@ -140,7 +145,7 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
       ];
       for (const d of this.extraSkillDirs) {
         const isAbsolute = d.startsWith('/') || d.startsWith('~');
-        const resolved = isAbsolute ? expandPath(d) : join(this.workspaceRoot, d);
+        const resolved = isAbsolute ? expandPath(d, this.getHomedir()) : join(this.workspaceRoot, d);
         if (!isAbsolute) {
           try {
             assertSafePath(this.workspaceRoot, resolved);
