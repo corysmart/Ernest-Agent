@@ -11,15 +11,36 @@ export const KILL_GRACE_MS = 3000;
 
 const DEFAULT_GRACE_MS = KILL_GRACE_MS;
 
+const isUnix = process.platform !== 'win32';
+
+/**
+ * Kills the process (or process group). When useProcessGroup is true and on Unix,
+ * sends signal to the process group so forked children are terminated.
+ */
+function killProcess(proc: ChildProcess, sig: 'SIGTERM' | 'SIGKILL', useProcessGroup: boolean): void {
+  if (!proc.pid) return;
+  try {
+    if (useProcessGroup && isUnix) {
+      process.kill(-proc.pid, sig);
+    } else {
+      proc.kill(sig);
+    }
+  } catch {
+    /* already exited */
+  }
+}
+
 /**
  * Listens for abort signal and forcefully terminates the child process:
  * SIGTERM on abort, then SIGKILL after graceMs if the process hasn't exited.
- * Cleans up the grace timer when the process closes to avoid killing an already-dead PID.
+ * When useProcessGroup is true, spawn must use detached: true (Unix); kills the
+ * process group so forked children are terminated.
  */
 export function killOnAbort(
   proc: ChildProcess,
   signal: AbortSignal | undefined,
-  graceMs: number = DEFAULT_GRACE_MS
+  graceMs: number = DEFAULT_GRACE_MS,
+  useProcessGroup: boolean = true
 ): void {
   if (!signal) return;
 
@@ -33,18 +54,10 @@ export function killOnAbort(
   };
 
   const listener = () => {
-    try {
-      proc.kill('SIGTERM');
-    } catch {
-      /* already exited */
-    }
+    killProcess(proc, 'SIGTERM', useProcessGroup);
     clearGraceTimer();
     timeoutId = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        /* already exited */
-      }
+      killProcess(proc, 'SIGKILL', useProcessGroup);
       timeoutId = undefined;
     }, graceMs);
   };

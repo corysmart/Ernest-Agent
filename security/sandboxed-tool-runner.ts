@@ -277,14 +277,19 @@ export class SandboxedToolRunner {
       let completed = false;
 
       // P2: On timeout, send abort so worker kills subprocesses before we terminate
-      const timeoutId = setTimeout(async () => {
+      const timeoutId = setTimeout(() => {
         if (!completed) {
           completed = true;
           clearTimeout(timeoutId);
           worker.postMessage({ type: 'abort', requestId });
-          await new Promise((r) => setTimeout(r, KILL_GRACE_MS + 500));
-          worker.terminate();
           reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
+          setTimeout(() => {
+            try {
+              worker.terminate();
+            } catch {
+              /* already terminated */
+            }
+          }, KILL_GRACE_MS + 500);
         }
       }, this.timeoutMs);
       

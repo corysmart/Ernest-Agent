@@ -114,10 +114,11 @@ export class CodexLLMAdapter implements LLMAdapter {
         cwd: this.cwd,
         shell: false,
         stdio: [fd, 'pipe', 'pipe'],
-        signal: controller.signal
+        signal: controller.signal,
+        detached: process.platform !== 'win32'
       });
 
-      killOnAbort(proc, controller.signal, KILL_GRACE_MS);
+      killOnAbort(proc, controller.signal, KILL_GRACE_MS, true);
 
       proc.stdout?.on('data', (chunk: Buffer) => {
         stdout += chunk.toString();

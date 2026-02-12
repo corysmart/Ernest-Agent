@@ -15,7 +15,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
-import { killOnAbort } from './cli-kill';
+import { killOnAbort, KILL_GRACE_MS } from './cli-kill';
 
 const WORKSPACE_ROOT = process.cwd();
 
@@ -63,10 +63,11 @@ export const invokeCodex: ToolHandler = async (
       cwd,
       shell: false,
       stdio: [fd, 'pipe', 'pipe'],
-      signal
+      signal,
+      detached: process.platform !== 'win32'
     });
 
-    killOnAbort(proc, signal, 3000);
+    killOnAbort(proc, signal, KILL_GRACE_MS, true);
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
