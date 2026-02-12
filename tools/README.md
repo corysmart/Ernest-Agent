@@ -1,4 +1,63 @@
-# CLI Tools (invoke_codex, invoke_claude)
+# Agent Tools
+
+Tools the agent can invoke when given appropriate goals.
+
+## File Workspace Tools (Autonomous Execution)
+
+These tools let the agent read, list, run commands, and write files within a workspace. They are scoped by `FILE_WORKSPACE_ROOT` (fallback: `CODEX_CWD`, then `process.cwd()`). Supports `~` expansion.
+
+### read_file
+
+Read file contents from the workspace. Used to inspect HEARTBEAT.md, source files, etc.
+
+| Input    | Type   | Description                          |
+|----------|--------|--------------------------------------|
+| path     | string | File path within workspace (required) |
+| encoding | string | Encoding (default utf-8)             |
+
+**Returns:** `{ success, content?, error? }`
+
+**Env:** `READ_FILE_MAX_BYTES` (default 524288). Larger files are rejected.
+
+### list_dir
+
+List directory contents. Used to see project layout between steps.
+
+| Input     | Type    | Description                             |
+|-----------|---------|-----------------------------------------|
+| path      | string  | Directory path (optional, default ".")   |
+| recursive | boolean | Include subdirectories (default false)   |
+
+**Returns:** `{ success, entries: [{ name, isFile, isDirectory }], error? }`
+
+### run_command
+
+Run shell commands (e.g. `npm test`, `curl`) without Codex.
+
+| Input    | Type   | Description                                  |
+|----------|--------|----------------------------------------------|
+| command  | string | Command to run (required)                    |
+| cwd      | string | Working directory (optional, within workspace) |
+| timeoutMs| number | Max execution time in ms (optional)           |
+
+**Returns:** `{ success, stdout?, stderr?, exitCode?, error? }`
+
+**Env:** `RUN_COMMAND_TIMEOUT_MS` (default 60000).
+
+### write_file
+
+Write content to a file. Used to update HEARTBEAT.md or task state.
+
+| Input   | Type   | Description                          |
+|---------|--------|--------------------------------------|
+| path    | string | File path within workspace (required) |
+| content | string | Content to write (required)          |
+
+**Returns:** `{ success, error? }`
+
+Creates parent directories if needed.
+
+## CLI Tools (invoke_codex, invoke_claude)
 
 These tools run Codex and Claude Code from the terminal, using your existing subscriptions instead of separate API keys.
 
@@ -69,3 +128,69 @@ Example with system prompt:
 ```bash
 claude --system-prompt "You are a concise coding assistant." "Review this pull request"
 ```
+
+## Email and Scheduling Tools
+
+### create_test_email_account
+
+Creates a disposable test email account via Ethereal. Saves credentials to `data/email-config.json` so `send_email` works immediately. **For testing only**—emails appear in Ethereal's web inbox, not real recipients.
+
+**Example:** "Set up email for testing" – the agent can call this to create an account and configure sending.
+
+### save_email_config
+
+Saves SMTP credentials to the config file so `send_email` works. Use when the user provides credentials (host, port, user, pass). Never writes to `.env`.
+
+| Input    | Type   | Description                        |
+|----------|--------|------------------------------------|
+| host     | string | SMTP host (required)               |
+| user     | string | SMTP username (required)           |
+| pass     | string | SMTP password (required)           |
+| port     | number | Port (default 587)                 |
+| from     | string | From address (defaults to user)    |
+
+**Example:** "Save my Gmail SMTP: host smtp.gmail.com, user me@gmail.com, pass xxxx" – the agent extracts and saves.
+
+### send_email
+
+Sends an email via SMTP. Uses credentials from env vars or the config file (populated by `create_test_email_account` or `save_email_config`).
+
+| Input   | Type   | Description                                   |
+|---------|--------|-----------------------------------------------|
+| to      | string | Recipient email (required)                    |
+| subject | string | Subject line (required)                        |
+| body    | string | Plain text body (or use text, content)         |
+| html    | string | HTML body (optional; use with or instead of body) |
+
+**Env config:** `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (defaults to SMTP_USER).
+
+**Example:** Tell the agent "Email me a summary at user@example.com" – it can call `send_email` with the summary.
+
+### schedule_task
+
+Registers a recurring task. Tasks are persisted to a JSON file. A scheduler (separate process or server feature) must run to execute them.
+
+| Input           | Type   | Description                                              |
+|----------------|--------|----------------------------------------------------------|
+| schedule       | string | Cron expression (required, e.g. `0 9 * * *` for 9am daily) |
+| goalTitle      | string | What the agent should do when the task runs (required)   |
+| goalDescription| string | Optional details                                         |
+| recipientEmail | string | Email to send results to (optional)                      |
+
+**Env config:** `SCHEDULED_TASKS_PATH` (default: `data/scheduled-tasks.json`).
+
+**Example:** "Schedule a good morning email at 9am every day with an update on my agents" – the agent can call `schedule_task` with `schedule: "0 9 * * *"`, `goalTitle: "Send good morning update with agent status"`, `recipientEmail: "me@example.com"`.
+
+**Note:** A scheduler process that reads this file and triggers runs is not yet included. The task is stored for when you add one.
+
+### get_recent_runs
+
+Returns a summary of recent agent runs from the observability store.
+
+| Input | Type   | Description                    |
+|-------|--------|--------------------------------|
+| limit | number | Max runs to return (default 10) |
+
+**Requirements:** `OBS_UI_ENABLED=true` to persist runs. Uses `OBS_UI_DATA_DIR` (default: `data/observability`).
+
+**Example:** For a "good morning update" goal, the agent can call `get_recent_runs` first to summarize status, then `send_email` to deliver it.
