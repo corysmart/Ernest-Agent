@@ -1,0 +1,4 @@
+# Entire workspace is user data - agent updates SOUL, HEARTBEAT, MEMORY, etc.
+# Ignore all by default. Use: git add -f <file> to version specific files.
+*
+!.gitignore

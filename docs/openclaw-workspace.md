@@ -1,6 +1,6 @@
 # OpenClaw Workspace Support
 
-Ernest Agent can read from an OpenClaw-compatible workspace to inject context into the observation pipeline. This enables interoperability with [OpenClaw](https://github.com/openclaw/openclaw) workspaces and prompt templates.
+Ernest Agent **always** reads from an OpenClaw-compatible workspace to inject context into the observation pipeline. The HTTP server merges workspace content (AGENTS.md, SOUL.md, TOOLS.md, etc.) with each request's observation. This enables interoperability with [OpenClaw](https://github.com/openclaw/openclaw) workspaces and prompt templates.
 
 ## Overview
 
@@ -44,7 +44,7 @@ const observation = normalizer.normalize(raw);
 
 ## Options
 
-- **workspaceRoot**: Default `~/.openclaw/workspace`. Supports `~` expansion.
+- **workspaceRoot**: Default `~/.openclaw/workspace`. Set `OPENCLAW_WORKSPACE_ROOT` to override. Supports `~` expansion.
 - **includeDailyMemory**: Include `memory/YYYY-MM-DD.md` for today and yesterday. Default: true.
 - **includeSkills**: Include `workspace/skills/<name>/SKILL.md`. Default: false.
 - **extraSkillDirs**: Additional directories to scan for skills. Absolute paths or relative to workspace. Relative paths must not escape the workspace root (`..` is rejected).
@@ -76,8 +76,12 @@ cp /path/to/openclaw/docs/reference/templates/TOOLS.md ~/.openclaw/workspace/
 
 See [OpenClaw reference](https://docs.openclaw.ai/reference/AGENTS.default) for full template docs.
 
-This repo also includes a local snapshot of defaults in `docs/openclaw-workspace-defaults/` with an installer script:
+This repo includes defaults in `docs/openclaw-workspace-defaults/` and an installer script that copies a `.gitignore` so the entire workspace is ignored by default (SOUL, HEARTBEAT, MEMORY, etc. are updated by the agent and contain user data).
 
 ```bash
 ./scripts/install-openclaw-workspace-defaults.sh
 ```
+
+## Server Integration
+
+The HTTP server (`/agent/run-once`) always injects OpenClaw workspace content into every request. Workspace observations (agents, soul, tools, user, memory, etc.) are merged with the request body's observation; request keys override workspace keys when both exist. Set `OPENCLAW_WORKSPACE_ROOT` to use a custom workspace path (default: `~/.openclaw/workspace`).

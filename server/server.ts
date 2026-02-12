@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { buildContainer } from './container';
 import { CognitiveAgent } from '../core/agent/cognitive-agent';
 import { RequestEnvironment } from './request-environment';
+import { OpenClawWorkspaceAdapter } from '../env/openclaw-workspace-adapter';
+import { CompositeObservationAdapter } from '../runtime/composite-observation-adapter';
+import { ObservationNormalizer } from '../runtime/observation-normalizer';
+import { RequestObservationAdapter } from './request-observation-adapter';
 import { assertSafeObject } from '../security/validation';
 import { RuleBasedWorldModel } from '../world/world-model';
 import { SelfModel } from '../self/self-model';
@@ -225,11 +229,26 @@ export async function buildServer(options?: { logger?: boolean }) {
       }
     }
 
-    const environment = new RequestEnvironment({
+    const openclaw = new OpenClawWorkspaceAdapter({
+      workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace',
+      includeDailyMemory: true
+    });
+    const requestAdapter = new RequestObservationAdapter({
       timestamp: observation.timestamp ?? Date.now(),
-      state: observation.state,
-      events: observation.events
-    }, toolRunner, {
+      state: observation.state ?? {},
+      events: observation.events,
+      conversation_history: observation.conversation_history
+    });
+    const composite = new CompositeObservationAdapter([openclaw, requestAdapter]);
+    const rawObs = await composite.getObservations();
+    const normalizer = new ObservationNormalizer();
+    const normalizedObs = normalizer.normalize(rawObs);
+    normalizedObs.timestamp = observation.timestamp ?? Date.now();
+    if (observation.conversation_history) {
+      normalizedObs.conversation_history = observation.conversation_history;
+    }
+
+    const environment = new RequestEnvironment(normalizedObs, toolRunner, {
       auditLogger,
       tenantId, // P3: Propagate authenticated tenantId to audit logging
       requestId

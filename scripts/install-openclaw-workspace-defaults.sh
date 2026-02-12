@@ -21,4 +21,7 @@ cp "$SOURCE_DIR/SOUL.md" "$TARGET_DIR/SOUL.md"
 cp "$SOURCE_DIR/TOOLS.md" "$TARGET_DIR/TOOLS.md"
 cp "$SOURCE_DIR/USER.md" "$TARGET_DIR/USER.md"
 
+# .gitignore to avoid committing sensitive files (MEMORY.md, memory/, USER.md, TOOLS.md)
+cp "$SOURCE_DIR/.gitignore" "$TARGET_DIR/.gitignore"
+
 echo "Installed OpenClaw workspace defaults to: $TARGET_DIR"

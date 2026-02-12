@@ -10,4 +10,12 @@ describe('Path traversal protection', () => {
   it('rejects paths escaping base', () => {
     expect(() => assertSafePath(base, '/var/app/../etc/passwd')).toThrow('Path traversal detected');
   });
+
+  it('rejects path with null byte', () => {
+    expect(() => assertSafePath(base, 'file\0.txt')).toThrow('Invalid path');
+  });
+
+  it('allows exact base path match', () => {
+    expect(() => assertSafePath(base, '.')).not.toThrow();
+  });
 });

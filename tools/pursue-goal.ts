@@ -8,7 +8,8 @@
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 
 export const pursueGoal: ToolHandler = async (input: Record<string, unknown>) => {
-  return { acknowledged: true, input };
+  const { __abortSignal, ...rest } = input;
+  return { acknowledged: true, input: rest };
 };
 
 

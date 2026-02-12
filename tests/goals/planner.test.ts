@@ -59,6 +59,30 @@ describe('HeuristicPlanner', () => {
     })).toThrow('No candidate actions provided');
   });
 
+  it('uses first action when all scores are equal or lower', () => {
+    const worldModel: WorldModel = {
+      update: (obs) => ({ timestamp: obs.timestamp, facts: obs.state, uncertainty: 0.2 }),
+      simulate: (_state, action) => ({
+        action,
+        expectedState: { timestamp: Date.now(), facts: {}, uncertainty: 0.2 },
+        uncertainty: 0.5,
+        score: -Infinity
+      }),
+      updateFromResult: (state) => state
+    };
+
+    const planner = new HeuristicPlanner(worldModel);
+    const actions: AgentAction[] = [{ type: 'a' }, { type: 'b' }];
+
+    const plan = planner.plan(goal, {
+      worldState: { timestamp: 1, facts: {}, uncertainty: 0.3 },
+      self: { capabilities: [], tools: [], reliability: 0.8, confidence: 0.7, failures: 0, successes: 1 },
+      candidateActions: actions
+    });
+
+    expect(plan.steps[0]!.action.type).toBe('a');
+  });
+
   it('rejects invalid action descriptors', () => {
     const worldModel: WorldModel = {
       update: (obs) => ({ timestamp: obs.timestamp, facts: obs.state, uncertainty: 0.2 }),

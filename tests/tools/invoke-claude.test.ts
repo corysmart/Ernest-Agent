@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { mkdtempSync, writeFileSync, rmdirSync, mkdirSync, unlinkSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { invokeClaude } from '../../tools/invoke-claude';
@@ -18,7 +18,7 @@ describe('invoke_claude', () => {
 
   afterEach(() => {
     try {
-      rmdirSync(tmpDir, { recursive: true });
+      rmSync(tmpDir, { recursive: true });
     } catch {
       /* ignore */
     }

@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmdirSync, rmSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { homedir } from 'os';
@@ -13,7 +13,7 @@ describe('OpenClawWorkspaceAdapter', () => {
 
   afterEach(() => {
     try {
-      rmdirSync(workspaceRoot, { recursive: true });
+      rmSync(workspaceRoot, { recursive: true });
     } catch {
       /* ignore */
     }

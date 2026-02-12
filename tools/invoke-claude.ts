@@ -10,7 +10,7 @@
  */
 
 import { spawn } from 'child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
@@ -55,7 +55,7 @@ export const invokeClaude: ToolHandler = async (
   const tmpDir = mkdtempSync(join(tmpdir(), 'claude-'));
   const cleanup = () => {
     try {
-      rmdirSync(tmpDir, { recursive: true });
+      rmSync(tmpDir, { recursive: true });
     } catch {
       /* ignore */
     }
