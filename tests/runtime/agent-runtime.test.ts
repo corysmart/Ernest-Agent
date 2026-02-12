@@ -509,6 +509,30 @@ describe('AgentRuntime', () => {
     })).toThrow(/maxEventQueueSize/);
   });
 
+  it('rejects invalid runTimeoutGraceMs in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutGraceMs: -1
+    })).toThrow(/runTimeoutGraceMs/);
+
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutGraceMs: NaN
+    })).toThrow(/runTimeoutGraceMs/);
+  });
+
+  it('rejects invalid runTimeoutChargeTokens in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutChargeTokens: -1
+    })).toThrow(/runTimeoutChargeTokens/);
+  });
+
   it('rejects invalid runTimeoutMs in constructor', () => {
     const provider = createRunProvider();
     expect(() => new AgentRuntime({
@@ -611,6 +635,32 @@ describe('AgentRuntime', () => {
     await jest.advanceTimersByTimeAsync(100);
 
     expect(aborted).toBe(true);
+    runtime.stop();
+  });
+
+  it('provider error does not charge runTimeoutChargeTokens', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        throw new Error('provider failed');
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 500 }]]),
+      runTimeoutMs: 1000,
+      runTimeoutChargeTokens: 1000
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(100);
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(100);
+    expect(runCount).toBe(2);
     runtime.stop();
   });
 

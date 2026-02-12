@@ -22,6 +22,16 @@ interface TenantState {
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
+const RUN_TIMEOUT_SENTINEL = Symbol('RunTimeout');
+
+function isRunTimeoutError(error: unknown): boolean {
+  return (
+    error != null &&
+    typeof error === 'object' &&
+    RUN_TIMEOUT_SENTINEL in (error as object)
+  );
+}
+
 export class AgentRuntime {
   private readonly options: Required<
     Pick<
@@ -69,11 +79,21 @@ export class AgentRuntime {
       );
     }
 
-    const runTimeoutGraceMs = options.runTimeoutGraceMs ?? runTimeoutMs;
-    const runTimeoutChargeTokens = Math.max(
-      0,
-      Math.floor(Number(options.runTimeoutChargeTokens ?? 512))
-    );
+    const rawGrace = options.runTimeoutGraceMs ?? runTimeoutMs;
+    const runTimeoutGraceMs = Math.floor(Number(rawGrace));
+    if (!Number.isFinite(runTimeoutGraceMs) || runTimeoutGraceMs < 0) {
+      throw new Error(
+        `runTimeoutGraceMs must be a finite non-negative number. Got: ${options.runTimeoutGraceMs}`
+      );
+    }
+
+    const rawCharge = options.runTimeoutChargeTokens ?? 512;
+    const runTimeoutChargeTokens = Math.floor(Number(rawCharge));
+    if (!Number.isFinite(runTimeoutChargeTokens) || runTimeoutChargeTokens < 0) {
+      throw new Error(
+        `runTimeoutChargeTokens must be a finite non-negative number. Got: ${options.runTimeoutChargeTokens}`
+      );
+    }
 
     this.options = {
       ...options,
@@ -227,10 +247,11 @@ export class AgentRuntime {
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
     const runPromise = this.options.runProvider.runOnce(runContext);
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = globalThis.setTimeout(
-        () => reject(new Error(`Run timeout after ${this.options.runTimeoutMs}ms`)),
-        this.options.runTimeoutMs
-      );
+      timeoutId = globalThis.setTimeout(() => {
+        const err = new Error(`Run timeout after ${this.options.runTimeoutMs}ms`);
+        (err as Error & { [RUN_TIMEOUT_SENTINEL]: true })[RUN_TIMEOUT_SENTINEL] = true;
+        reject(err);
+      }, this.options.runTimeoutMs);
     });
 
     try {
@@ -254,30 +275,38 @@ export class AgentRuntime {
       if (timeoutId != null) {
         clearTimeout(timeoutId);
       }
-      controller.abort();
+      const timedOut = isRunTimeoutError(error);
+      if (timedOut) {
+        controller.abort();
+      }
       this.recordFailure(tenantId, now);
       this.logAudit(tenantId, runId, 'run_error', {
         error: error instanceof Error ? error.message : String(error)
       });
 
-      const gracePromise = new Promise<{ result: AgentLoopResult; tokensUsed?: number } | null>((resolve) => {
-        const tid = globalThis.setTimeout(() => resolve(null), this.options.runTimeoutGraceMs);
-        runPromise
-          .then((r) => {
-            clearTimeout(tid);
-            resolve(r);
-          })
-          .catch(() => {
-            clearTimeout(tid);
-            resolve(null);
-          });
-      });
+      if (timedOut) {
+        const gracePromise = new Promise<{ result: AgentLoopResult; tokensUsed?: number } | null>((resolve) => {
+          const tid = globalThis.setTimeout(() => resolve(null), this.options.runTimeoutGraceMs);
+          runPromise
+            .then((r) => {
+              clearTimeout(tid);
+              resolve(r);
+            })
+            .catch(() => {
+              clearTimeout(tid);
+              resolve(null);
+            });
+        });
 
-      const lateResult = await gracePromise;
-      if (lateResult) {
-        this.recordRun(tenantId, now, lateResult.tokensUsed ?? 0);
+        const lateResult = await gracePromise;
+        if (lateResult) {
+          this.recordRun(tenantId, now, lateResult.tokensUsed ?? 0);
+        } else {
+          this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
+        }
       } else {
-        this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
+        const lateResult = await runPromise.catch(() => null);
+        this.recordRun(tenantId, now, lateResult?.tokensUsed ?? 0);
       }
     }
   }
