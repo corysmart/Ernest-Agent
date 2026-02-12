@@ -37,6 +37,7 @@ const adapter = new CompositeObservationAdapter([
   new StaticObservationAdapter({ user_message: 'Hello' })
 ]);
 
+const normalizer = new ObservationNormalizer();
 const raw = await adapter.getObservations();
 const observation = normalizer.normalize(raw);
 ```
@@ -47,7 +48,7 @@ const observation = normalizer.normalize(raw);
 - **includeDailyMemory**: Include `memory/YYYY-MM-DD.md` for today and yesterday. Default: true.
 - **includeSkills**: Include `workspace/skills/<name>/SKILL.md`. Default: false.
 - **extraSkillDirs**: Additional directories to scan for skills. Absolute paths or relative to workspace.
-- **getDate**: Override for deterministic tests (`() => 'YYYY-MM-DD'`).
+- **getDate**: Override for deterministic tests (`() => 'YYYY-MM-DD'`). Default uses local date (not UTC).
 
 ## Skills Config
 

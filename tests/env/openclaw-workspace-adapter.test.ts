@@ -80,6 +80,28 @@ describe('OpenClawWorkspaceAdapter', () => {
     expect(obs.skills).toBeUndefined();
   });
 
+  it('expands ~/ correctly for workspace path', async () => {
+    const homeDir = require('os').homedir();
+    const homeWorkspace = join(homeDir, 'openclaw-workspace-expand-test');
+    try {
+      mkdirSync(homeWorkspace, { recursive: true });
+      writeFileSync(join(homeWorkspace, 'SOUL.md'), 'Home soul');
+
+      const adapter = new OpenClawWorkspaceAdapter({
+        workspaceRoot: '~/openclaw-workspace-expand-test'
+      });
+      const obs = await adapter.getObservations();
+
+      expect(obs.soul).toBe('Home soul');
+    } finally {
+      try {
+        require('fs').rmSync(homeWorkspace, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
   it('reads USER.md and MEMORY.md when present', async () => {
     writeFileSync(join(workspaceRoot, 'USER.md'), '# User');
     writeFileSync(join(workspaceRoot, 'MEMORY.md'), '# Memory');

@@ -45,14 +45,20 @@ export interface OpenClawWorkspaceAdapterOptions {
 }
 
 function expandPath(p: string): string {
-  if (p.startsWith('~/') || p === '~') {
-    return join(homedir(), p.slice(1));
+  if (p.startsWith('~/')) {
+    return join(homedir(), p.slice(2));
+  }
+  if (p === '~') {
+    return homedir();
   }
   return p;
 }
 
-function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+function formatDateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export class OpenClawWorkspaceAdapter implements ObservationAdapter {
@@ -68,7 +74,7 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
     this.includeDailyMemory = options.includeDailyMemory ?? true;
     this.includeSkills = options.includeSkills ?? false;
     this.extraSkillDirs = options.extraSkillDirs ?? [];
-    this.getDate = options.getDate ?? (() => formatDate(new Date()));
+    this.getDate = options.getDate ?? (() => formatDateLocal(new Date()));
   }
 
   async getObservations(): Promise<RawTextObservation> {
@@ -150,8 +156,12 @@ export class OpenClawWorkspaceAdapter implements ObservationAdapter {
   }
 
   private getYesterday(today: string): string {
-    const d = new Date(today + 'T12:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 1);
-    return formatDate(d);
+    const parts = today.split('-').map(Number);
+    const y = parts[0] ?? 0;
+    const m = (parts[1] ?? 1) - 1;
+    const day = parts[2] ?? 1;
+    const d = new Date(y, m, day);
+    d.setDate(d.getDate() - 1);
+    return formatDateLocal(d);
   }
 }
