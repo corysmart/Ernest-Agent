@@ -63,7 +63,7 @@ export interface RunOnceContext {
   tenantId: string;
   requestId?: string;
   runId: string;
-  /** Abort signal. When aborted (on timeout), provider should throw to cancel promptly. */
+  /** Abort signal. When aborted (on timeout), provider should throw to cancel. */
   signal?: AbortSignal;
 }
 
@@ -96,8 +96,10 @@ export interface AgentRuntimeOptions {
   maxEventQueueSize?: number;
   /** Run-level timeout in ms. On timeout, signal is aborted and run is recorded as failure. Default: 300000 (5 min). */
   runTimeoutMs?: number;
-  /** Grace period in ms after timeout to wait for provider to honor abort. Lock held until provider settles. Default: same as runTimeoutMs. */
+  /** Grace period in ms after timeout to wait for provider to honor abort. Default: same as runTimeoutMs. */
   runTimeoutGraceMs?: number;
+  /** Max ms to hold lock waiting for provider after timeout+grace. Prevents DoS from hung providers. Default: runTimeoutGraceMs. */
+  runTimeoutMaxLockHoldMs?: number;
   /** Tokens to charge when run times out and never returns a result. Default: 512. */
   runTimeoutChargeTokens?: number;
   /** TTL in ms for idle tenant eviction. Tenants inactive longer than this are removed from maps. No eviction if unset. */

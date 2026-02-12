@@ -1,8 +1,6 @@
 /**
  * AgentRuntime orchestrates the agent run loop via heartbeat and event triggers.
  * Provides budget guardrails, circuit breaker, kill switch, and audit logging.
- * Holds the per-tenant lock until the provider's runOnce promise settles, preventing
- * overlapping runs even when the provider ignores AbortSignal.
  */
 
 import type { AgentLoopResult } from '../core/contracts/agent';
@@ -46,6 +44,7 @@ export class AgentRuntime {
       | 'maxEventQueueSize'
       | 'runTimeoutMs'
       | 'runTimeoutGraceMs'
+      | 'runTimeoutMaxLockHoldMs'
       | 'runTimeoutChargeTokens'
     >
   > &
@@ -89,6 +88,14 @@ export class AgentRuntime {
       );
     }
 
+    const rawMaxLockHold = options.runTimeoutMaxLockHoldMs ?? runTimeoutGraceMs;
+    const runTimeoutMaxLockHoldMs = Math.floor(Number(rawMaxLockHold));
+    if (!Number.isFinite(runTimeoutMaxLockHoldMs) || runTimeoutMaxLockHoldMs < 0) {
+      throw new Error(
+        `runTimeoutMaxLockHoldMs must be a finite non-negative number. Got: ${options.runTimeoutMaxLockHoldMs}`
+      );
+    }
+
     const rawCharge = options.runTimeoutChargeTokens ?? 512;
     const runTimeoutChargeTokens = Math.floor(Number(rawCharge));
     if (!Number.isFinite(runTimeoutChargeTokens) || runTimeoutChargeTokens < 0) {
@@ -120,6 +127,7 @@ export class AgentRuntime {
       maxEventQueueSize,
       runTimeoutMs,
       runTimeoutGraceMs,
+      runTimeoutMaxLockHoldMs,
       runTimeoutChargeTokens
     };
   }
@@ -325,8 +333,10 @@ export class AgentRuntime {
         } else {
           this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
         }
-        // Hold lock until provider settles to prevent overlapping runs when it ignores abort
-        await runPromise.catch(() => {});
+        const maxHoldPromise = new Promise<void>((r) =>
+          globalThis.setTimeout(r, this.options.runTimeoutMaxLockHoldMs)
+        );
+        await Promise.race([runPromise.catch(() => {}), maxHoldPromise]);
       } else {
         const lateResult = await runPromise.catch(() => null);
         this.recordRun(tenantId, now, lateResult?.tokensUsed ?? 0);

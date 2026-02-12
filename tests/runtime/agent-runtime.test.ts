@@ -524,6 +524,15 @@ describe('AgentRuntime', () => {
     })).toThrow(/runTimeoutGraceMs/);
   });
 
+  it('rejects invalid runTimeoutMaxLockHoldMs in constructor', () => {
+    const provider = createRunProvider();
+    expect(() => new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      runTimeoutMaxLockHoldMs: -1
+    })).toThrow(/runTimeoutMaxLockHoldMs/);
+  });
+
   it('rejects invalid tenantIdleEvictionMs in constructor', () => {
     const provider = createRunProvider();
     expect(() => new AgentRuntime({
@@ -561,6 +570,35 @@ describe('AgentRuntime', () => {
       heartbeatIntervalMs: 1000,
       runTimeoutMs: -1
     })).toThrow(/runTimeoutMs/);
+  });
+
+  it('releases lock after maxLockHold when hung provider never settles (tenant not blocked)', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
+        runCount++;
+        return new Promise(() => {});
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      runTimeoutMs: 50,
+      runTimeoutGraceMs: 100,
+      runTimeoutMaxLockHoldMs: 80,
+      auditLogger: { logRuntimeEvent: () => {} }
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(60);
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(400);
+    expect(runCount).toBe(2);
+
+    runtime.stop();
   });
 
   it('holds lock until provider completes when provider ignores abort (no overlapping runs)', async () => {
