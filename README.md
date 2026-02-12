@@ -107,6 +107,10 @@ When `OBS_UI_ENABLED=true` (default in dev), a local dashboard is served at `/ui
 
 ![Observability dashboard](docs/Observability.png)
 
+![Audit Events](docs/Audit_Events.png)
+
+![Docs viewer](docs/Docs.png)
+
 Local-only by default: the server binds to localhost unless configured otherwise. When `API_KEY` is set, `/ui` routes require authentication unless `OBS_UI_SKIP_AUTH=true` (which forces the server to bind to localhost). SSE events include `run_complete` for live run updates. Markdown is sanitized before rendering. `/ui/clear` requires `OBS_UI_ALLOW_CLEAR=true` or non-production `NODE_ENV`. See [docs/api.md](docs/api.md) for endpoints and env vars.
 
 ## Why This Is Built as a Wrapper (Not a Model)
