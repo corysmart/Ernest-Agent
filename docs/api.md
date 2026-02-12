@@ -106,6 +106,10 @@ Authorization: Bearer <token>
 
 Per-IP rate limits apply. 429 is returned when exceeded.
 
+**Run timeout**
+
+Single run-once requests can take up to 10 minutes for complex tasks. Set `RUN_ONCE_TIMEOUT_MS` (default `600000`) to override. The server enforces this limit; the TUI client uses the same value for its fetch timeout. On timeout, the server returns 504 with `{"status":"error","error":"Run timed out after Ns"}`.
+
 ### Observability UI (when OBS_UI_ENABLED)
 
 When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`).

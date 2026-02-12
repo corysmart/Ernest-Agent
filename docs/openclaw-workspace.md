@@ -1,87 +1,104 @@
 # OpenClaw Workspace Support
 
-Ernest Agent **always** reads from an OpenClaw-compatible workspace to inject context into the observation pipeline. The HTTP server merges workspace content (AGENTS.md, SOUL.md, TOOLS.md, etc.) with each request's observation. This enables interoperability with [OpenClaw](https://github.com/openclaw/openclaw) workspaces and prompt templates.
+For `/agent/run-once`, the server creates `OpenClawWorkspaceAdapter` after request validation/auth checks pass. If the workspace root does not exist, the adapter returns `{}` and execution still continues.
 
-## Overview
+## Files Mapped Into Observations
 
-The `OpenClawWorkspaceAdapter` implements `ObservationAdapter` and reads the standard OpenClaw workspace layout:
+`OpenClawWorkspaceAdapter` reads these workspace files:
 
-| File | Observation key | Description |
-|------|-----------------|-------------|
-| AGENTS.md | agents | Workspace guidelines, session start, memory system |
-| SOUL.md | soul | Identity, tone, boundaries |
-| TOOLS.md | tools | Local notes (cameras, SSH, TTS, etc.) |
-| USER.md | user | Who the user is |
-| MEMORY.md | memory | Long-term curated memory |
-| BOOTSTRAP.md | bootstrap | First-run instructions (optional) |
-| HEARTBEAT.md | heartbeat | Heartbeat checklist (optional) |
-| memory/YYYY-MM-DD.md | memory_YYYY_MM_DD | Daily logs (today and yesterday) |
-| skills/\<name\>/SKILL.md | skills | Skill definitions (when enabled) |
+| File | Observation key | Notes |
+|------|-----------------|-------|
+| `AGENTS.md` | `agents` | Core workspace instructions |
+| `SOUL.md` | `soul` | Identity/tone/boundaries |
+| `TOOLS.md` | `tools` | Tool notes |
+| `USER.md` | `user` | User profile/context |
+| `MEMORY.md` | `memory` | Curated long-term memory |
+| `BOOTSTRAP.md` | `bootstrap` | Optional startup guidance |
+| `HEARTBEAT.md` | `heartbeat` | Optional recurring checklist |
+| `memory/YYYY-MM-DD.md` | `memory_YYYY_MM_DD` | Today and yesterday only when `includeDailyMemory` is enabled |
+| `skills/<name>/SKILL.md` | `skills` | Concatenated content when `includeSkills: true` |
 
-## Usage
+Behavior from current implementation (`env/openclaw-workspace-adapter.ts`):
 
-```typescript
-import { OpenClawWorkspaceAdapter } from './env/openclaw-workspace-adapter';
-import { CompositeObservationAdapter, StaticObservationAdapter, ObservationNormalizer } from './runtime';
+- Reads are synchronous (`statSync` + `readFileSync`).
+- Only regular files are read (`stat.isFile()` check).
+- Files larger than `maxFileBytes` are skipped (default `524288`, i.e. 512 KB).
+- Missing/unreadable files are skipped (best-effort).
+- Daily memory keys are generated as `memory_YYYY_MM_DD`.
 
-const openclaw = new OpenClawWorkspaceAdapter({
-  workspaceRoot: '~/.openclaw/workspace',
-  includeDailyMemory: true,
-  includeSkills: true,
-  extraSkillDirs: ['~/Projects/my-skills']
-});
+## Adapter Options
 
-// Combine with other adapters (later overrides earlier for same keys)
-const adapter = new CompositeObservationAdapter([
-  openclaw,
-  new StaticObservationAdapter({ user_message: 'Hello' })
-]);
+- `workspaceRoot`: default `~/.openclaw/workspace` (`~` and `~/...` expansion supported).
+- `includeDailyMemory`: default `true` (reads today + yesterday from `memory/`).
+- `includeSkills`: default `false`.
+- `extraSkillDirs`: additional skill roots (absolute, `~`-prefixed, or workspace-relative).
+- `maxFileBytes`: max bytes per file before skipping.
+- `getDate`: optional date provider (`YYYY-MM-DD`) for deterministic tests.
 
-const normalizer = new ObservationNormalizer();
-const raw = await adapter.getObservations();
-const observation = normalizer.normalize(raw);
-```
+For `extraSkillDirs`, workspace-relative entries that escape the workspace root are rejected/skipped.
 
-## Options
+`OpenClawWorkspaceAdapter` itself does not read environment variables directly. `OPENCLAW_WORKSPACE_ROOT` is applied by server wiring.
 
-- **workspaceRoot**: Default `~/.openclaw/workspace`. Set `OPENCLAW_WORKSPACE_ROOT` to override. Supports `~` expansion.
-- **includeDailyMemory**: Include `memory/YYYY-MM-DD.md` for today and yesterday. Default: true.
-- **includeSkills**: Include `workspace/skills/<name>/SKILL.md`. Default: false.
-- **extraSkillDirs**: Additional directories to scan for skills. Absolute paths or relative to workspace. Relative paths must not escape the workspace root (`..` is rejected).
-- **maxFileBytes**: Max bytes per file before skipping. Default: 524288 (512KB).
-- **getDate**: Override for deterministic tests (`() => 'YYYY-MM-DD'`). Default uses local date (not UTC).
+## Skills Loading
 
-## Skills Config
+When `includeSkills` is enabled:
 
-OpenClaw's skills config lives in `~/.openclaw/openclaw.json` under `skills`. The adapter does not parse that file. To mirror it:
+- The adapter scans `<workspaceRoot>/skills/<dir>/SKILL.md`.
+- It also scans each configured `extraSkillDirs` root using the same `<dir>/SKILL.md` pattern.
+- Skill content is concatenated into a single `skills` value.
+- Each entry is prefixed as `## Skill: <name>`.
+- Entries are separated with `---`.
 
-- Use `extraSkillDirs` for paths from `skills.load.extraDirs`
-- Set `includeSkills: true` to load `workspace/skills/*/SKILL.md`
+The adapter does not parse `~/.openclaw/openclaw.json`; if you keep extra skill directories there, mirror them manually in `extraSkillDirs`.
 
-## Security
+## Path Safety
 
-- Path validation ensures reads stay within the workspace (and extra skill dirs). Symlinks are resolved.
-- Files are read synchronously; large workspaces may block. Use for bounded contexts.
+- Workspace and skill-file reads are validated with `assertSafePath`.
+- Relative `extraSkillDirs` are validated against workspace root before scanning.
+- Symlink targets are resolved as part of safety checks (`realpathSync` inside path validation).
 
-## Templates
+## Workspace Defaults in This Repo
 
-OpenClaw provides default templates for AGENTS, BOOTSTRAP, IDENTITY, SOUL, TOOLS, USER. Copy them to your workspace:
-
-```bash
-mkdir -p ~/.openclaw/workspace
-cp /path/to/openclaw/docs/reference/templates/AGENTS.md ~/.openclaw/workspace/
-cp /path/to/openclaw/docs/reference/templates/SOUL.md ~/.openclaw/workspace/
-cp /path/to/openclaw/docs/reference/templates/TOOLS.md ~/.openclaw/workspace/
-```
-
-See [OpenClaw reference](https://docs.openclaw.ai/reference/AGENTS.default) for full template docs.
-
-This repo includes defaults in `docs/openclaw-workspace-defaults/` and an installer script that copies a `.gitignore` so the entire workspace is ignored by default (SOUL, HEARTBEAT, MEMORY, etc. are updated by the agent and contain user data).
+This repo ships starter files in `docs/openclaw-workspace-defaults/` and an installer:
 
 ```bash
 ./scripts/install-openclaw-workspace-defaults.sh
+# optional custom target:
+./scripts/install-openclaw-workspace-defaults.sh /path/to/workspace
 ```
+
+The installer currently copies:
+
+- `AGENTS.md`
+- `BOOTSTRAP.md`
+- `HEARTBEAT.md`
+- `IDENTITY.md`
+- `SOUL.md`
+- `TOOLS.md`
+- `USER.md`
+- `.gitignore`
+
+The installed `.gitignore` ignores the entire workspace by default (except `.gitignore`) to prevent accidental commits of user data.
+
+Notes:
+
+- `IDENTITY.md` is provided by defaults but is not currently mapped into observations by `OpenClawWorkspaceAdapter`.
+- The installer does not create `MEMORY.md` or `memory/YYYY-MM-DD.md`; create those as needed.
 
 ## Server Integration
 
-The HTTP server (`/agent/run-once`) always injects OpenClaw workspace content into every request. Workspace observations (agents, soul, tools, user, memory, etc.) are merged with the request body's observation; request keys override workspace keys when both exist. Set `OPENCLAW_WORKSPACE_ROOT` to use a custom workspace path (default: `~/.openclaw/workspace`).
+In `server/server.ts`, `/agent/run-once` composes observations as:
+
+1. `OpenClawWorkspaceAdapter({ workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace', includeDailyMemory: true })`
+2. `RequestObservationAdapter({ timestamp, state, events, conversation_history })`
+
+These are merged through `CompositeObservationAdapter([openclaw, requestAdapter])`, so request keys override workspace keys when both are present. Skills are not loaded by default in server mode (`includeSkills` is not enabled).
+
+Request-side mapping details from current code:
+
+- `observation.state` entries become raw observation keys (non-string values are JSON-stringified).
+- `observation.events` is written as a JSON string under `events`.
+- `observation.conversation_history` is written as a JSON string under `conversation_history`.
+- `observation.timestamp` is applied after normalization (not via the request adapter).
+
+`CompositeObservationAdapter` catches per-adapter errors and continues, so one adapter failure does not abort request execution.

@@ -68,12 +68,14 @@ Interactive interface for all operations—no curl required:
 npm run ernest-agent
 ```
 
+![Terminal UI](docs/Terminal.png)
+
 Starts a menu-driven TUI. Connects to the server, prompts for user message and goal, and supports:
 - Run agent (full execution)
 - Dry run (with or without LLM)
 - Health check
 
-Set `AGENT_URL` for a different endpoint (default: `http://127.0.0.1:3000`).
+Set `AGENT_URL` for a different endpoint (default: `http://127.0.0.1:3000`). Set `RUN_ONCE_TIMEOUT_MS` to adjust the request timeout (default 600000, i.e. 10 minutes).
 
 ### Script-based requests
 

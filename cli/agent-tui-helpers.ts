@@ -63,6 +63,16 @@ export function formatResult(result: RunOnceResponse): string {
     if (ar.skipped) lines.push('(Skipped - dry run)');
   }
   if (result.stateTrace?.length) lines.push(`Trace: ${result.stateTrace.join(' → ')}`);
-  if (result.durationMs !== undefined) lines.push(`Duration: ${result.durationMs}ms`);
+  if (result.durationMs !== undefined) {
+    lines.push(`Duration: ${formatDurationMs(result.durationMs)}`);
+  }
   return lines.join('\n');
+}
+
+/** Format milliseconds as human-readable string (e.g. 134000 -> "2m 14s"). */
+export function formatDurationMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 }
