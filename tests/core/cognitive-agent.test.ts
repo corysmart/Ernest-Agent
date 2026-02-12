@@ -25,6 +25,7 @@ function buildAgent(overrides: Partial<{
   auditLogger?: StructuredAuditLoggerType;
   tenantId?: string;
   requestId?: string;
+  dryRun?: false | 'with-llm' | 'without-llm';
 }> = {}) {
   const environment: Environment = overrides.environment ?? {
     observe: async () => observation,
@@ -100,7 +101,8 @@ function buildAgent(overrides: Partial<{
     permissionGate,
     auditLogger: overrides.auditLogger,
     tenantId: overrides.tenantId,
-    requestId: overrides.requestId
+    requestId: overrides.requestId,
+    dryRun: overrides.dryRun
   });
 }
 
@@ -173,5 +175,70 @@ describe('CognitiveAgent', () => {
     expect(loggedErrors[0]!.context.reasons).toEqual(['suspicious-pattern', 'injection-attempt']);
     
     logErrorSpy.mockRestore();
+  });
+
+  it('dryRun with-llm: calls LLM, skips act and state updates', async () => {
+    let actCalled = false;
+    let addEpisodicCalled = false;
+    const baseMemory = {
+      addEpisodic: async () => { addEpisodicCalled = true; },
+      addSemantic: async () => {},
+      addProcedural: async () => {},
+      query: async () => [],
+      injectForPrompt: async () => 'memory'
+    };
+    const agent = buildAgent({
+      dryRun: 'with-llm',
+      environment: {
+        observe: async () => observation,
+        act: async () => {
+          actCalled = true;
+          return { success: true };
+        }
+      },
+      memoryManager: baseMemory as unknown as MemoryManager
+    });
+
+    const result = await agent.runOnce();
+
+    expect(result.status).toBe('dry_run');
+    expect(result.dryRunMode).toBe('with-llm');
+    expect(result.decision?.actionType).toBe('recover');
+    expect(result.actionResult?.skipped).toBe(true);
+    expect(actCalled).toBe(false);
+    expect(addEpisodicCalled).toBe(false);
+  });
+
+  it('dryRun without-llm: skips LLM, uses stub decision, skips act', async () => {
+    let llmCalled = false;
+    let actCalled = false;
+    const agent = buildAgent({
+      dryRun: 'without-llm',
+      llmAdapter: {
+        generate: async () => {
+          llmCalled = true;
+          return { content: '{}', tokensUsed: 0 };
+        },
+        embed: async () => [],
+        estimateCost: () => 0
+      },
+      environment: {
+        observe: async () => observation,
+        act: async () => {
+          actCalled = true;
+          return { success: true };
+        }
+      }
+    });
+
+    const result = await agent.runOnce();
+
+    expect(result.status).toBe('dry_run');
+    expect(result.dryRunMode).toBe('without-llm');
+    expect(result.decision?.actionType).toBe('pursue_goal');
+    expect(result.decision?.reasoning).toContain('Dry run');
+    expect(result.actionResult?.skipped).toBe(true);
+    expect(llmCalled).toBe(false);
+    expect(actCalled).toBe(false);
   });
 });

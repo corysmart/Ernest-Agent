@@ -20,11 +20,15 @@ export type AgentState =
   | 'complete'
   | 'error';
 
+export type DryRunMode = 'with-llm' | 'without-llm';
+
 export interface AgentLoopResult {
-  status: 'completed' | 'idle' | 'error';
+  status: 'completed' | 'idle' | 'error' | 'dry_run';
   error?: string;
   decision?: AgentDecision;
-  actionResult?: { success: boolean; error?: string };
+  actionResult?: { success: boolean; error?: string; skipped?: boolean };
   selectedGoalId?: string;
   stateTrace?: AgentState[];
+  /** Set when status is dry_run */
+  dryRunMode?: DryRunMode;
 }

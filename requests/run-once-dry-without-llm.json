@@ -1,0 +1,12 @@
+{
+  "observation": {
+    "state": {
+      "user_message": "Hello"
+    }
+  },
+  "goal": {
+    "id": "g1",
+    "title": "Summarize"
+  },
+  "dryRun": "without-llm"
+}

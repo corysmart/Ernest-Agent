@@ -45,7 +45,9 @@ const runOnceSchema = z.object({
     .min(1)
     .max(256)
     .refine((val) => !val.includes(':'), { message: 'tenantId cannot contain colons' })
-    .optional()
+    .optional(),
+  /** with-llm: call LLM, validate, skip act/memory/self. without-llm: skip LLM, use stub, skip act/memory/self. */
+  dryRun: z.enum(['with-llm', 'without-llm']).optional()
 });
 
 /**
@@ -123,7 +125,7 @@ export async function buildServer(options?: { logger?: boolean }) {
       return;
     }
 
-    const { observation, goal, tenantId: clientTenantId } = parsed.data;
+    const { observation, goal, tenantId: clientTenantId, dryRun } = parsed.data;
     
     // P1: Authenticate request and bind tenantId to authenticated principal
     const auth = authenticateRequest(request);
@@ -210,7 +212,8 @@ export async function buildServer(options?: { logger?: boolean }) {
       permissionGate: container.resolve<ToolPermissionGate>('permissionGate'),
       auditLogger,
       tenantId, // P3: Propagate authenticated tenantId to audit logging
-      requestId
+      requestId,
+      dryRun: dryRun ?? false
     });
 
     const result = await agent.runOnce();
@@ -226,12 +229,16 @@ export async function buildServer(options?: { logger?: boolean }) {
     }
 
     if (result.status === 'idle') {
-      // No goals to process - not an error, but might want to indicate no action taken
       reply.code(200).send(result);
       return;
     }
 
-    // Success case
+    if (result.status === 'dry_run') {
+      reply.code(200).send(result);
+      return;
+    }
+
+    // Success case (completed)
     reply.code(200).send(result);
   });
 

@@ -69,12 +69,21 @@ npm run curl:run-goal
 ```
 Sends observation plus a goal. The agent attempts to satisfy the goal.
 
+**Dry run (no side effects)**
+```bash
+npm run curl:run-dry-with-llm     # Calls LLM, shows decision, skips tools
+npm run curl:run-dry-without-llm  # Skips LLM, uses stub decision, no API cost
+```
+Add `"dryRun": "with-llm"` or `"dryRun": "without-llm"` to the request body.
+
 ## Customizing the Request
 
 Edit the JSON payloads in `requests/`:
 
 - `requests/run-once.json` – observation only
 - `requests/run-once-goal.json` – observation and goal
+- `requests/run-once-dry-with-llm.json` – dry run with LLM (decision only, no tools)
+- `requests/run-once-dry-without-llm.json` – dry run without LLM (stub decision, no API cost)
 
 Example observation state:
 ```json
@@ -98,6 +107,15 @@ Example with goal:
   }
 }
 ```
+
+Example with dry run:
+```json
+{
+  "observation": { "state": { "user_message": "..." } },
+  "dryRun": "with-llm"
+}
+```
+Use `"dryRun": "with-llm"` to call the LLM and return the decision without executing tools. Use `"dryRun": "without-llm"` to skip the LLM and return a stub decision (no API cost).
 
 ## Different Port
 
@@ -126,6 +144,7 @@ curl -s -X POST http://localhost:3000/agent/run-once \
 
 ## Next Steps
 
+- [docs/api.md](docs/api.md) – Full API reference (run-once, dryRun, auth)
 - [docs/architecture.md](docs/architecture.md) – How the agent loop works
 - [docs/security.md](docs/security.md) – Security model and controls
 - [tools/README.md](tools/README.md) – invoke_codex and invoke_claude setup

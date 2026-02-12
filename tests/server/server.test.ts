@@ -33,6 +33,54 @@ describe('Server', () => {
     await server.close();
   });
 
+  it('supports dryRun with-llm', async () => {
+    process.env.LLM_PROVIDER = 'mock';
+    process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+
+    const server = await buildServer({ logger: false });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/agent/run-once',
+      payload: {
+        observation: { timestamp: 1, state: { status: 'ok' } },
+        goal: { id: 'g1', title: 'Recover', priority: 1, horizon: 'short' },
+        dryRun: 'with-llm'
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload);
+    expect(body.status).toBe('dry_run');
+    expect(body.dryRunMode).toBe('with-llm');
+    expect(body.decision?.actionType).toBe('pursue_goal');
+    expect(body.actionResult?.skipped).toBe(true);
+
+    await server.close();
+  });
+
+  it('supports dryRun without-llm', async () => {
+    const server = await buildServer({ logger: false });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/agent/run-once',
+      payload: {
+        observation: { timestamp: 1, state: { status: 'ok' } },
+        goal: { id: 'g1', title: 'Recover', priority: 1, horizon: 'short' },
+        dryRun: 'without-llm'
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload);
+    expect(body.status).toBe('dry_run');
+    expect(body.dryRunMode).toBe('without-llm');
+    expect(body.decision?.reasoning).toContain('Dry run');
+
+    await server.close();
+  });
+
   it('does not share goal state across requests', async () => {
     process.env.LLM_PROVIDER = 'mock';
     process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';

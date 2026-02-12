@@ -43,7 +43,11 @@ The agent executes a state machine on each run:
 10. **store** – Persist episodic memory of the outcome
 11. **learn** – Update self-model and goal status from outcome
 
-The loop may exit early on error, idle (no goal), or completion.
+The loop may exit early on error, idle (no goal), completion, or dry run.
+
+**Dry run modes** (when `dryRun` is set): Skip act, memory, and self-model updates. Two variants:
+- `with-llm`: Full loop including LLM call; returns decision without executing tools. Useful to preview what the model would do (e.g., with Codex).
+- `without-llm`: Skips LLM call; uses first candidate action as stub decision. No API cost; useful for pipeline testing.
 
 ## Architecture Diagram
 

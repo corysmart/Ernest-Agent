@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { LLMAdapter, PromptRequest } from '../contracts/llm';
 import type { PromptInjectionFilter, OutputValidator, ToolPermissionGate } from '../contracts/security';
-import type { AgentDecision, AgentLoopResult, AgentState } from '../contracts/agent';
+import type { AgentDecision, AgentLoopResult, AgentState, DryRunMode } from '../contracts/agent';
 import type { Environment } from '../../env/environment';
 import type { IMemoryManager } from '../../memory/memory-manager';
 import type { WorldModel } from '../../world/world-model';
@@ -25,6 +25,8 @@ interface CognitiveAgentOptions {
   auditLogger?: StructuredAuditLogger;
   tenantId?: string;
   requestId?: string;
+  /** When set, skips act/memory/self-model. with-llm: calls LLM; without-llm: skips LLM, uses stub decision. */
+  dryRun?: false | DryRunMode;
 }
 
 export class CognitiveAgent {
@@ -106,8 +108,9 @@ export class CognitiveAgent {
         candidateActions
       });
 
-      // Store plan as procedural memory for future reference
-      if (plan.steps && plan.steps.length > 0) {
+      // Store plan as procedural memory for future reference (skipped in dry run)
+      const dryRun = this.options.dryRun;
+      if (plan.steps && plan.steps.length > 0 && !dryRun) {
         await this.options.memoryManager.addProcedural({
           id: randomUUID(),
           type: 'procedural',
@@ -118,6 +121,16 @@ export class CognitiveAgent {
         });
       }
 
+      let decision: AgentDecision;
+      if (dryRun === 'without-llm') {
+        transition('validate_output');
+        decision = {
+          actionType: candidateActions[0]?.type ?? 'pursue_goal',
+          actionPayload: candidateActions[0]?.payload ?? { goalId: goal.id },
+          confidence: 1,
+          reasoning: 'Dry run (no LLM)'
+        };
+      } else {
       transition('query_llm');
       const systemPrompt = buildSystemPrompt({
         memoryContext,
@@ -185,7 +198,8 @@ export class CognitiveAgent {
         return { status: 'error', error: `Invalid LLM output: ${(validated.errors ?? []).join('; ')}`, stateTrace };
       }
 
-      const decision = validated.data;
+        decision = validated.data;
+      }
       if (!decision.actionType) {
         transition('error');
         return { status: 'error', error: 'Decision missing actionType', stateTrace };
@@ -216,6 +230,18 @@ export class CognitiveAgent {
       if (!permission.allowed) {
         transition('error');
         return { status: 'error', error: permission.reason ?? 'Action not permitted', stateTrace };
+      }
+
+      if (dryRun) {
+        transition('complete');
+        return {
+          status: 'dry_run',
+          decision,
+          actionResult: { success: true, skipped: true },
+          selectedGoalId: goal.id,
+          stateTrace,
+          dryRunMode: dryRun
+        };
       }
 
       transition('act');

@@ -140,6 +140,7 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 - [docs/threat-model.md](docs/threat-model.md) – Assets, adversaries, threats and mitigations
 - [docs/testing.md](docs/testing.md) – Test workflow, coverage, and conventions
 - [docs/openclaw-workspace.md](docs/openclaw-workspace.md) – OpenClaw workspace support (AGENTS, SOUL, TOOLS, skills)
+- [docs/api.md](docs/api.md) – HTTP API reference (health, run-once, dryRun)
 
 ## Project Status & Roadmap
 
@@ -158,6 +159,7 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 - Fastify API for one-shot agent execution
 - **Runtime**: `AgentRuntime` with heartbeat, `emitEvent()`, budget guardrails, circuit breaker, kill switch; `ObservationAdapter` and `ObservationNormalizer` for text-only observations
 - **CLI tools**: `invoke_codex` and `invoke_claude` for running Codex and Claude Code from the terminal using your existing subscriptions ([tools/README.md](tools/README.md))
+- **Dry run**: `dryRun: 'with-llm'` or `'without-llm'` to preview decisions without executing tools or updating state
 
 **Planned / next milestones:**
 
