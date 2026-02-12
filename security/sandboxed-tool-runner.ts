@@ -275,6 +275,14 @@ export class SandboxedToolRunner {
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const worker = new Worker(workerScriptPath);
       let completed = false;
+      let terminateTimerId: NodeJS.Timeout | undefined;
+
+      const clearTerminateTimer = () => {
+        if (terminateTimerId !== undefined) {
+          clearTimeout(terminateTimerId);
+          terminateTimerId = undefined;
+        }
+      };
 
       // P2: On timeout, send abort so worker kills subprocesses before we terminate
       const timeoutId = setTimeout(() => {
@@ -283,7 +291,8 @@ export class SandboxedToolRunner {
           clearTimeout(timeoutId);
           worker.postMessage({ type: 'abort', requestId });
           reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
-          setTimeout(() => {
+          terminateTimerId = setTimeout(() => {
+            terminateTimerId = undefined;
             try {
               worker.terminate();
             } catch {
@@ -297,6 +306,7 @@ export class SandboxedToolRunner {
         if (response.requestId === requestId && !completed) {
           completed = true;
           clearTimeout(timeoutId);
+          clearTerminateTimer();
           worker.terminate();
           
           if (response.success && response.result) {
@@ -313,12 +323,14 @@ export class SandboxedToolRunner {
         if (!completed) {
           completed = true;
           clearTimeout(timeoutId);
+          clearTerminateTimer();
           worker.terminate();
           reject(error);
         }
       });
       
       worker.on('exit', (code) => {
+        clearTerminateTimer();
         if (!completed && code !== 0) {
           completed = true;
           clearTimeout(timeoutId);
@@ -334,6 +346,7 @@ export class SandboxedToolRunner {
       } catch (error) {
         completed = true;
         clearTimeout(timeoutId);
+        clearTerminateTimer();
         worker.terminate();
         reject(new Error(`Tool ${toolName} input contains non-serializable values: ${error instanceof Error ? error.message : String(error)}`));
         return;
