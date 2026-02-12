@@ -574,6 +574,7 @@ describe('AgentRuntime', () => {
 
   it('releases lock after maxLockHold when hung provider never settles (tenant not blocked)', async () => {
     let runCount = 0;
+    const logged: string[] = [];
     const provider: RunProvider = {
       runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
         runCount++;
@@ -587,7 +588,7 @@ describe('AgentRuntime', () => {
       runTimeoutMs: 50,
       runTimeoutGraceMs: 100,
       runTimeoutMaxLockHoldMs: 80,
-      auditLogger: { logRuntimeEvent: () => {} }
+      auditLogger: { logRuntimeEvent: (ctx) => { logged.push(ctx.event); } }
     });
 
     runtime.start('t1');
@@ -597,6 +598,7 @@ describe('AgentRuntime', () => {
     runtime.emitEvent('t1');
     await jest.advanceTimersByTimeAsync(400);
     expect(runCount).toBe(2);
+    expect(logged).toContain('run_max_lock_hold_released');
 
     runtime.stop();
   });

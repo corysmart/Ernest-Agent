@@ -33,6 +33,7 @@ export type RuntimeAuditEvent =
   | 'run_blocked_circuit_breaker'
   | 'run_blocked_kill_switch'
   | 'run_error'
+  | 'run_max_lock_hold_released'
   | 'circuit_breaker_opened'
   | 'circuit_breaker_recovered';
 

@@ -334,17 +334,26 @@ export class AgentRuntime {
           this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
         }
         let maxHoldId: ReturnType<typeof globalThis.setTimeout> | undefined;
-        const maxHoldPromise = new Promise<void>((r) => {
-          maxHoldId = globalThis.setTimeout(r, this.options.runTimeoutMaxLockHoldMs);
+        const maxHoldPromise = new Promise<'maxHold'>((r) => {
+          maxHoldId = globalThis.setTimeout(
+            () => r('maxHold'),
+            this.options.runTimeoutMaxLockHoldMs
+          );
         });
         const runSettled = runPromise
           .catch(() => {})
+          .then(() => 'provider' as const)
           .finally(() => {
             if (maxHoldId != null) {
               clearTimeout(maxHoldId);
             }
           });
-        await Promise.race([runSettled, maxHoldPromise]);
+        const winner = await Promise.race([runSettled, maxHoldPromise]);
+        if (winner === 'maxHold') {
+          this.logAudit(tenantId, runId, 'run_max_lock_hold_released', {
+            reason: 'Provider did not settle within runTimeoutMaxLockHoldMs; overlap possible'
+          });
+        }
       } else {
         const lateResult = await runPromise.catch(() => null);
         this.recordRun(tenantId, now, lateResult?.tokensUsed ?? 0);
