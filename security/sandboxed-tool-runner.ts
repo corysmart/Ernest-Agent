@@ -202,18 +202,20 @@ export class SandboxedToolRunner {
     handler: ToolHandler,
     input: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    const controller = new AbortController();
+    const inputWithSignal = { ...input, __abortSignal: controller.signal };
+
     let timeoutId: NodeJS.Timeout | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
+        controller.abort();
         reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
     });
 
     try {
-      // Race between tool execution and timeout
-      // LIMITATION: If handler is CPU-bound, it will continue executing even after timeout
       const result = await Promise.race([
-        handler(input),
+        handler(inputWithSignal),
         timeoutPromise
       ]);
 

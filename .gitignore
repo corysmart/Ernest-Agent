@@ -28,6 +28,7 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+tests/fixtures/*.txt
 
 # Logs
 logs/

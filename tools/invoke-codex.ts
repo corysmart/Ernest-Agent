@@ -5,10 +5,18 @@
  * existing ChatGPT/Codex authentication (subscription).
  *
  * Requires Codex CLI to be installed: npm install -g @openai/codex or brew install codex
+ *
+ * Prompt passed via stdin (temp file) to avoid argv exposure in process listings.
  */
 
 import { spawn } from 'child_process';
+import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
+import { assertSafePath } from '../security/path-traversal';
+
+const WORKSPACE_ROOT = process.cwd();
 
 export const invokeCodex: ToolHandler = async (
   input: Record<string, unknown>
@@ -18,18 +26,44 @@ export const invokeCodex: ToolHandler = async (
     return { success: false, error: 'prompt is required and must be a non-empty string' };
   }
 
-  const cwd =
-    typeof input.cwd === 'string' && input.cwd.trim() ? input.cwd : process.cwd();
+  const rawCwd = typeof input.cwd === 'string' && input.cwd.trim() ? input.cwd : WORKSPACE_ROOT;
+  try {
+    assertSafePath(WORKSPACE_ROOT, rawCwd);
+  } catch {
+    return { success: false, error: 'Path traversal detected in cwd' };
+  }
+  const cwd = rawCwd;
+
+  const tmpDir = mkdtempSync(join(tmpdir(), 'codex-'));
+  const promptPath = join(tmpDir, 'p.txt');
+  let fd: number;
+  try {
+    writeFileSync(promptPath, prompt.trim(), 'utf8');
+    fd = openSync(promptPath, 'r');
+  } catch (err) {
+    try {
+      rmdirSync(tmpDir, { recursive: true });
+    } catch {
+      /* ignore */
+    }
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to write temp prompt'
+    };
+  }
+
+  const signal = input.__abortSignal instanceof AbortSignal ? input.__abortSignal : undefined;
 
   return new Promise((resolve) => {
-    const proc = spawn('codex', [prompt.trim()], {
-      cwd,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
     let stdout = '';
     let stderr = '';
+
+    const proc = spawn('codex', ['exec'], {
+      cwd,
+      shell: false,
+      stdio: [fd, 'pipe', 'pipe'],
+      signal
+    });
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
@@ -39,17 +73,28 @@ export const invokeCodex: ToolHandler = async (
       stderr += chunk.toString();
     });
 
-    proc.on('close', (code, signal) => {
+    const cleanup = () => {
+      try {
+        closeSync(fd);
+        rmdirSync(tmpDir, { recursive: true });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    proc.on('close', (code, sig) => {
+      cleanup();
       resolve({
         success: code === 0,
         exitCode: code ?? null,
-        signal: signal ?? null,
+        signal: sig ?? null,
         stdout: stdout.trim(),
         stderr: stderr.trim()
       });
     });
 
     proc.on('error', (err) => {
+      cleanup();
       resolve({
         success: false,
         error: err.message,

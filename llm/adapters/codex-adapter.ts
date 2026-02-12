@@ -3,9 +3,14 @@
  * Requires no API key; uses the user's ChatGPT subscription.
  *
  * Prerequisite: npm install -g @openai/codex or brew install codex
+ *
+ * Prompts are passed via stdin (temp file as fd) to avoid argv exposure in process listings.
  */
 
 import { spawn } from 'child_process';
+import { mkdtempSync, writeFileSync, openSync, closeSync, rmdirSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import {
   countApproxTokens,
   DEFAULT_MAX_TOKENS,
@@ -74,15 +79,33 @@ export class CodexLLMAdapter implements LLMAdapter {
     stderr?: string;
     error?: string;
   }> {
-    return new Promise((resolve) => {
-      const proc = spawn('codex', [prompt], {
-        cwd: this.cwd,
-        shell: false,
-        stdio: ['ignore', 'pipe', 'pipe']
+    const tmpDir = mkdtempSync(join(tmpdir(), 'codex-'));
+    const promptPath = join(tmpDir, 'p.txt');
+    let fd: number;
+    try {
+      writeFileSync(promptPath, prompt, 'utf8');
+      fd = openSync(promptPath, 'r');
+    } catch (err) {
+      try {
+        rmdirSync(tmpDir, { recursive: true });
+      } catch {
+        /* ignore */
+      }
+      return Promise.resolve({
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to write temp prompt'
       });
+    }
 
+    return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
+
+      const proc = spawn('codex', ['exec'], {
+        cwd: this.cwd,
+        shell: false,
+        stdio: [fd, 'pipe', 'pipe']
+      });
 
       proc.stdout?.on('data', (chunk: Buffer) => {
         stdout += chunk.toString();
@@ -91,7 +114,17 @@ export class CodexLLMAdapter implements LLMAdapter {
         stderr += chunk.toString();
       });
 
+      const cleanup = () => {
+        try {
+          closeSync(fd);
+          rmdirSync(tmpDir, { recursive: true });
+        } catch {
+          /* ignore */
+        }
+      };
+
       proc.on('close', (code) => {
+        cleanup();
         resolve({
           success: code === 0,
           stdout: stdout.trim(),
@@ -100,6 +133,7 @@ export class CodexLLMAdapter implements LLMAdapter {
       });
 
       proc.on('error', (err) => {
+        cleanup();
         resolve({
           success: false,
           error: err.message,

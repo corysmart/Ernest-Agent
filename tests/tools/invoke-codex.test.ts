@@ -72,18 +72,18 @@ describe('invoke_codex', () => {
 
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['Summarize this project.'],
+      ['exec'],
       expect.objectContaining({
         cwd: process.cwd(),
-        shell: false,
-        stdio: ['ignore', 'pipe', 'pipe']
+        shell: false
       })
     );
+    expect(mockedSpawn.mock.calls[0]![2]!.stdio![0]).toBeGreaterThanOrEqual(0);
     expect(result.success).toBe(true);
     expect(result.exitCode).toBe(0);
   });
 
-  it('uses cwd when provided', async () => {
+  it('uses cwd when provided and within workspace', async () => {
     const mockChild: {
       stdout: { on: jest.Mock };
       stderr: { on: jest.Mock };
@@ -104,16 +104,27 @@ describe('invoke_codex', () => {
     (mockChild.stdout as { on: jest.Mock }).on.mockImplementation(() => mockChild);
     (mockChild.stderr as { on: jest.Mock }).on.mockImplementation(() => mockChild);
 
-    await invokeCodex({
+    const result = await invokeCodex({
       prompt: 'Fix bugs.',
-      cwd: '/projects/my-app'
+      cwd: '.' // within workspace
     });
 
+    expect(result.success).toBe(true);
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['Fix bugs.'],
-      expect.objectContaining({ cwd: '/projects/my-app' })
+      ['exec'],
+      expect.objectContaining({ cwd: expect.any(String) })
     );
+  });
+
+  it('rejects path traversal in cwd', async () => {
+    const result = await invokeCodex({
+      prompt: 'Hello',
+      cwd: '/etc/passwd'
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Path traversal');
+    expect(mockedSpawn).not.toHaveBeenCalled();
   });
 
   it('returns spawn error when codex is not found', async () => {
