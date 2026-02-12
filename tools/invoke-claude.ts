@@ -65,7 +65,7 @@ export const invokeClaude: ToolHandler = async (
   if (typeof systemPrompt === 'string' && systemPrompt.trim()) {
     const sysPath = join(tmpDir, 'system.txt');
     try {
-      writeFileSync(sysPath, systemPrompt.trim(), 'utf8');
+      writeFileSync(sysPath, systemPrompt.trim(), { encoding: 'utf8', mode: 0o600 });
       args.push('--system-prompt-file', sysPath);
     } catch (err) {
       cleanup();
@@ -89,7 +89,7 @@ export const invokeClaude: ToolHandler = async (
     } else {
       content = (prompt as string).trim();
     }
-    writeFileSync(promptPath, content, 'utf8');
+    writeFileSync(promptPath, content, { encoding: 'utf8', mode: 0o600 });
   } catch (err) {
     cleanup();
     return {

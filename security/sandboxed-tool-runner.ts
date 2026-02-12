@@ -273,14 +273,16 @@ export class SandboxedToolRunner {
     
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const worker = new Worker(workerScriptPath);
-      let timeoutId: NodeJS.Timeout | undefined;
       let completed = false;
-      
-      // P2: Hard timeout - forcefully terminate worker on timeout
-      timeoutId = setTimeout(() => {
+
+      // P2: On timeout, send abort so worker kills subprocesses before we terminate
+      const timeoutId = setTimeout(async () => {
         if (!completed) {
           completed = true;
-          worker.terminate(); // Hard kill - cannot be caught or ignored
+          clearTimeout(timeoutId);
+          worker.postMessage({ type: 'abort', requestId });
+          await new Promise((r) => setTimeout(r, 200));
+          worker.terminate();
           reject(new Error(`Tool ${toolName} execution timed out after ${this.timeoutMs}ms`));
         }
       }, this.timeoutMs);
@@ -288,9 +290,7 @@ export class SandboxedToolRunner {
       worker.on('message', (response: { requestId: string; success: boolean; result?: Record<string, unknown>; error?: string }) => {
         if (response.requestId === requestId && !completed) {
           completed = true;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          clearTimeout(timeoutId);
           worker.terminate();
           
           if (response.success && response.result) {
@@ -306,9 +306,7 @@ export class SandboxedToolRunner {
       worker.on('error', (error) => {
         if (!completed) {
           completed = true;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          clearTimeout(timeoutId);
           worker.terminate();
           reject(error);
         }
@@ -317,9 +315,7 @@ export class SandboxedToolRunner {
       worker.on('exit', (code) => {
         if (!completed && code !== 0) {
           completed = true;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          clearTimeout(timeoutId);
           reject(new Error(`Worker exited with code ${code}`));
         }
       });
@@ -331,9 +327,7 @@ export class SandboxedToolRunner {
         assertStructuredCloneCompatible(input, 'input');
       } catch (error) {
         completed = true;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+        clearTimeout(timeoutId);
         worker.terminate();
         reject(new Error(`Tool ${toolName} input contains non-serializable values: ${error instanceof Error ? error.message : String(error)}`));
         return;

@@ -38,7 +38,7 @@ export const invokeCodex: ToolHandler = async (
   const promptPath = join(tmpDir, 'p.txt');
   let fd: number;
   try {
-    writeFileSync(promptPath, prompt.trim(), 'utf8');
+    writeFileSync(promptPath, prompt.trim(), { encoding: 'utf8', mode: 0o600 });
     fd = openSync(promptPath, 'r');
   } catch (err) {
     try {

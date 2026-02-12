@@ -35,11 +35,16 @@ function simpleEmbedding(text: string, size: number): number[] {
   return norm === 0 ? vector : vector.map((v) => v / norm);
 }
 
+const DEFAULT_CODEX_TIMEOUT_MS = 300_000; // 5 min, matches runTimeoutMs
+
 export class CodexLLMAdapter implements LLMAdapter {
   private readonly cwd: string;
+  private readonly timeoutMs: number;
 
-  constructor(options?: { cwd?: string }) {
+  constructor(options?: { cwd?: string; timeoutMs?: number }) {
     this.cwd = options?.cwd ?? process.cwd();
+    const envMs = process.env.CODEX_TIMEOUT_MS ? parseInt(process.env.CODEX_TIMEOUT_MS, 10) : NaN;
+    this.timeoutMs = options?.timeoutMs ?? (!Number.isNaN(envMs) && envMs > 0 ? envMs : DEFAULT_CODEX_TIMEOUT_MS);
   }
 
   async generate(input: PromptRequest): Promise<LLMResponse> {
@@ -83,7 +88,7 @@ export class CodexLLMAdapter implements LLMAdapter {
     const promptPath = join(tmpDir, 'p.txt');
     let fd: number;
     try {
-      writeFileSync(promptPath, prompt, 'utf8');
+      writeFileSync(promptPath, prompt, { encoding: 'utf8', mode: 0o600 });
       fd = openSync(promptPath, 'r');
     } catch (err) {
       try {
@@ -97,6 +102,9 @@ export class CodexLLMAdapter implements LLMAdapter {
       });
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
@@ -104,7 +112,8 @@ export class CodexLLMAdapter implements LLMAdapter {
       const proc = spawn('codex', ['exec'], {
         cwd: this.cwd,
         shell: false,
-        stdio: [fd, 'pipe', 'pipe']
+        stdio: [fd, 'pipe', 'pipe'],
+        signal: controller.signal
       });
 
       proc.stdout?.on('data', (chunk: Buffer) => {
@@ -115,6 +124,7 @@ export class CodexLLMAdapter implements LLMAdapter {
       });
 
       const cleanup = () => {
+        clearTimeout(timeoutId);
         try {
           closeSync(fd);
           rmdirSync(tmpDir, { recursive: true });
@@ -123,12 +133,14 @@ export class CodexLLMAdapter implements LLMAdapter {
         }
       };
 
-      proc.on('close', (code) => {
+      proc.on('close', (code, sig) => {
         cleanup();
+        const timedOut = sig === 'SIGTERM';
         resolve({
-          success: code === 0,
+          success: code === 0 && !timedOut,
           stdout: stdout.trim(),
-          stderr: stderr.trim()
+          stderr: stderr.trim(),
+          ...(timedOut && { error: `Codex timed out after ${this.timeoutMs}ms` })
         });
       });
 

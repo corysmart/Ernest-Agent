@@ -17,31 +17,53 @@ import { toolRegistry, initializeToolRegistry } from '../tools/registry';
 // Workers have their own module scope, so they need to initialize the registry themselves
 initializeToolRegistry();
 
-parentPort?.on('message', async (request: { toolName: string; input: Record<string, unknown>; requestId: string }) => {
-  try {
-    const handler = toolRegistry.get(request.toolName);
-    
-    if (!handler) {
-      parentPort?.postMessage({
-        requestId: request.requestId,
-        success: false,
-        error: `Tool ${request.toolName} not found in registry`
-      });
-      return;
-    }
+const abortControllers = new Map<string, AbortController>();
 
-    const result = await handler(request.input);
-    
-    parentPort?.postMessage({
-      requestId: request.requestId,
-      success: true,
-      result
-    });
-  } catch (error) {
-    parentPort?.postMessage({
-      requestId: request.requestId,
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    });
+parentPort?.on('message', (msg: { type?: string; toolName?: string; input?: Record<string, unknown>; requestId?: string }) => {
+  if (msg.type === 'abort' && msg.requestId) {
+    const controller = abortControllers.get(msg.requestId);
+    if (controller) {
+      controller.abort();
+      abortControllers.delete(msg.requestId);
+    }
+    return;
   }
+
+  const request = msg as { toolName: string; input: Record<string, unknown>; requestId: string };
+  const requestId = request.requestId;
+
+  (async () => {
+    const controller = new AbortController();
+    abortControllers.set(requestId, controller);
+    const inputWithSignal = { ...request.input, __abortSignal: controller.signal };
+
+    try {
+      const handler = toolRegistry.get(request.toolName);
+
+      if (!handler) {
+        parentPort?.postMessage({
+          requestId,
+          success: false,
+          error: `Tool ${request.toolName} not found in registry`
+        });
+        return;
+      }
+
+      const result = await handler(inputWithSignal);
+      abortControllers.delete(requestId);
+
+      parentPort?.postMessage({
+        requestId,
+        success: true,
+        result
+      });
+    } catch (error) {
+      abortControllers.delete(requestId);
+      parentPort?.postMessage({
+        requestId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  })();
 });
