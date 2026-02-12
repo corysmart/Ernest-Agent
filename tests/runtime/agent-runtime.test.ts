@@ -1,3 +1,4 @@
+import type { AgentLoopResult } from '../../core/contracts/agent';
 import { AgentRuntime } from '../../runtime/agent-runtime';
 import type { RunProvider } from '../../runtime/types';
 
@@ -521,6 +522,96 @@ describe('AgentRuntime', () => {
       heartbeatIntervalMs: 1000,
       runTimeoutMs: -1
     })).toThrow(/runTimeoutMs/);
+  });
+
+  it('releases lock after grace period when provider never completes', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
+        runCount++;
+        return new Promise(() => {});
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      runTimeoutMs: 50,
+      runTimeoutGraceMs: 100,
+      auditLogger: { logRuntimeEvent: () => { } }
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(60);
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(200);
+    expect(runCount).toBe(2);
+
+    runtime.stop();
+  });
+
+  it('charges runTimeoutChargeTokens when run times out and never returns', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      runOnce: (): Promise<{ result: AgentLoopResult; tokensUsed?: number }> => {
+        runCount++;
+        return new Promise(() => {});
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 10, maxTokensPerDay: 1000 }]]),
+      runTimeoutMs: 50,
+      runTimeoutGraceMs: 80,
+      runTimeoutChargeTokens: 400
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(200);
+
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(200);
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(100);
+    expect(runCount).toBeLessThanOrEqual(3);
+    runtime.stop();
+  });
+
+  it('passes AbortSignal to runOnce for cooperative cancellation', async () => {
+    let aborted = false;
+    const provider: RunProvider = {
+      async runOnce(context) {
+        if (context.signal?.aborted) {
+          aborted = true;
+          throw new Error('Aborted');
+        }
+        await new Promise<void>((_, reject) => {
+          context.signal?.addEventListener('abort', () => {
+            aborted = true;
+            reject(new Error('Aborted'));
+          });
+        });
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      runTimeoutMs: 20,
+      runTimeoutGraceMs: 50
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    await jest.advanceTimersByTimeAsync(100);
+
+    expect(aborted).toBe(true);
+    runtime.stop();
   });
 
   it('records failure and keeps lock until run completes on timeout', async () => {

@@ -58,11 +58,18 @@ export interface KillSwitchState {
   enabled: boolean;
 }
 
+/** Context passed to RunProvider.runOnce. */
+export interface RunOnceContext {
+  tenantId: string;
+  requestId?: string;
+  runId: string;
+  /** Optional abort signal. When aborted, provider should throw to cancel. */
+  signal?: AbortSignal;
+}
+
 /** Provider of a single agent run. Abstraction for DI; runtime does not depend on CognitiveAgent directly. */
 export interface RunProvider {
-  runOnce(
-    context: { tenantId: string; requestId?: string; runId: string }
-  ): Promise<{ result: AgentLoopResult; tokensUsed?: number }>;
+  runOnce(context: RunOnceContext): Promise<{ result: AgentLoopResult; tokensUsed?: number }>;
 }
 
 /** Options for constructing AgentRuntime. */
@@ -87,8 +94,12 @@ export interface AgentRuntimeOptions {
   generateRunId?: (tenantId: string) => string;
   /** Max event queue size. When exceeded, oldest events are dropped. Default: 100. Must be >= 1. */
   maxEventQueueSize?: number;
-  /** Run-level timeout in ms. On timeout, run is recorded as failure and lock is released. Default: 300000 (5 min). */
+  /** Run-level timeout in ms. On timeout, signal is aborted and run is recorded as failure. Default: 300000 (5 min). */
   runTimeoutMs?: number;
+  /** Grace period in ms after timeout to wait for provider to honor abort. Lock released after this. Default: same as runTimeoutMs. */
+  runTimeoutGraceMs?: number;
+  /** Tokens to charge when run times out and never returns a result. Default: 512. */
+  runTimeoutChargeTokens?: number;
   /** TTL in ms for idle tenant eviction. Tenants inactive longer than this are removed from maps. No eviction if unset. */
   tenantIdleEvictionMs?: number;
 }

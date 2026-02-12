@@ -10,6 +10,7 @@ export { StaticObservationAdapter } from './static-observation-adapter';
 export type { ObservationAdapter } from './observation-adapter';
 export type {
   RunProvider,
+  RunOnceContext,
   RuntimeAuditLogger,
   RuntimeAuditContext,
   RuntimeAuditEvent,

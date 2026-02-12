@@ -3,6 +3,7 @@
  * Provides budget guardrails, circuit breaker, kill switch, and audit logging.
  */
 
+import type { AgentLoopResult } from '../core/contracts/agent';
 import type {
   AgentRuntimeOptions,
   RuntimeAuditLogger,
@@ -32,6 +33,8 @@ export class AgentRuntime {
       | 'generateRunId'
       | 'maxEventQueueSize'
       | 'runTimeoutMs'
+      | 'runTimeoutGraceMs'
+      | 'runTimeoutChargeTokens'
     >
   > &
     Pick<
@@ -43,7 +46,7 @@ export class AgentRuntime {
   private readonly tenantStates = new Map<string, TenantState>();
   private readonly tenantLocks = new Map<string, Promise<void>>();
   private readonly pendingHeartbeatRuns = new Set<string>();
-  private readonly inFlightRuns = new Set<string>();
+  private readonly inFlightRunCount = new Map<string, number>();
   private readonly tenantLastActivityAt = new Map<string, number>();
   private eventQueue: string[] = [];
   private processingEvents = false;
@@ -66,6 +69,12 @@ export class AgentRuntime {
       );
     }
 
+    const runTimeoutGraceMs = options.runTimeoutGraceMs ?? runTimeoutMs;
+    const runTimeoutChargeTokens = Math.max(
+      0,
+      Math.floor(Number(options.runTimeoutChargeTokens ?? 512))
+    );
+
     this.options = {
       ...options,
       getTime: options.getTime ?? (() => Date.now()),
@@ -78,7 +87,9 @@ export class AgentRuntime {
         return `run-${tenantId}-${hex}`;
       }),
       maxEventQueueSize,
-      runTimeoutMs
+      runTimeoutMs,
+      runTimeoutGraceMs,
+      runTimeoutChargeTokens
     };
   }
 
@@ -174,11 +185,17 @@ export class AgentRuntime {
   }
 
   private async executeRun(tenantId: string): Promise<void> {
-    this.inFlightRuns.add(tenantId);
+    const prev = this.inFlightRunCount.get(tenantId) ?? 0;
+    this.inFlightRunCount.set(tenantId, prev + 1);
     try {
       return await this.withTenantLock(tenantId, () => this.doExecuteRun(tenantId));
     } finally {
-      this.inFlightRuns.delete(tenantId);
+      const n = this.inFlightRunCount.get(tenantId)! - 1;
+      if (n <= 0) {
+        this.inFlightRunCount.delete(tenantId);
+      } else {
+        this.inFlightRunCount.set(tenantId, n);
+      }
     }
   }
 
@@ -205,8 +222,10 @@ export class AgentRuntime {
 
     this.logAudit(tenantId, runId, 'run_started');
 
+    const controller = new AbortController();
+    const runContext = { tenantId, runId, signal: controller.signal };
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-    const runPromise = this.options.runProvider.runOnce({ tenantId, runId });
+    const runPromise = this.options.runProvider.runOnce(runContext);
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = globalThis.setTimeout(
         () => reject(new Error(`Run timeout after ${this.options.runTimeoutMs}ms`)),
@@ -235,12 +254,31 @@ export class AgentRuntime {
       if (timeoutId != null) {
         clearTimeout(timeoutId);
       }
-      this.recordRun(tenantId, now, 0);
+      controller.abort();
       this.recordFailure(tenantId, now);
       this.logAudit(tenantId, runId, 'run_error', {
         error: error instanceof Error ? error.message : String(error)
       });
-      await runPromise.catch(() => {});
+
+      const gracePromise = new Promise<{ result: AgentLoopResult; tokensUsed?: number } | null>((resolve) => {
+        const tid = globalThis.setTimeout(() => resolve(null), this.options.runTimeoutGraceMs);
+        runPromise
+          .then((r) => {
+            clearTimeout(tid);
+            resolve(r);
+          })
+          .catch(() => {
+            clearTimeout(tid);
+            resolve(null);
+          });
+      });
+
+      const lateResult = await gracePromise;
+      if (lateResult) {
+        this.recordRun(tenantId, now, lateResult.tokensUsed ?? 0);
+      } else {
+        this.recordRun(tenantId, now, this.options.runTimeoutChargeTokens);
+      }
     }
   }
 
@@ -298,7 +336,7 @@ export class AgentRuntime {
     const now = this.options.getTime();
     const cutoff = now - ttl;
     for (const [id, at] of this.tenantLastActivityAt.entries()) {
-      if (at < cutoff && !this.inFlightRuns.has(id)) {
+      if (at < cutoff && (this.inFlightRunCount.get(id) ?? 0) === 0) {
         this.tenantStates.delete(id);
         this.tenantLocks.delete(id);
         this.tenantLastActivityAt.delete(id);
