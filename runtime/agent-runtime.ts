@@ -265,7 +265,9 @@ export class AgentRuntime {
     const controller = new AbortController();
     const runContext = { tenantId, runId, signal: controller.signal };
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-    const runPromise = this.options.runProvider.runOnce(runContext);
+    const runPromise = Promise.resolve().then(() =>
+      this.options.runProvider.runOnce(runContext)
+    );
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = globalThis.setTimeout(() => {
         const err = new Error(`Run timeout after ${this.options.runTimeoutMs}ms`);

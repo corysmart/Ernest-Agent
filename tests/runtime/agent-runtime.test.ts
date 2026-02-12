@@ -303,6 +303,33 @@ describe('AgentRuntime', () => {
     runtime.stop();
   });
 
+  it('handles synchronous runOnce throw (recordFailure, run_error audit)', async () => {
+    const logged: string[] = [];
+    const provider: RunProvider = {
+      runOnce() {
+        throw new Error('sync throw');
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 1000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]]),
+      circuitBreakerConfig: new Map([['t1', { failureThreshold: 2, cooldownMs: 1000 }]]),
+      auditLogger: { logRuntimeEvent: (ctx) => { logged.push(ctx.event); } }
+    });
+
+    runtime.start('t1');
+    await jest.advanceTimersByTimeAsync(1000);
+
+    expect(logged).toContain('run_error');
+
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(logged.filter((e) => e === 'run_error').length).toBe(2);
+    expect(logged).toContain('circuit_breaker_opened');
+
+    runtime.stop();
+  });
+
   it('start does nothing when already running', async () => {
     const provider = createRunProvider();
     const runtime = new AgentRuntime({
