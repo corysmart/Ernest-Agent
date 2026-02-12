@@ -380,6 +380,62 @@ describe('AgentRuntime', () => {
     runtime.stop();
   });
 
+  it('stop clears queued events', async () => {
+    const provider = createRunProvider();
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 60_000,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    runtime.emitEvent('t1');
+    runtime.emitEvent('t1');
+    runtime.stop();
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(provider.runCount).toBeLessThanOrEqual(1);
+  });
+
+  it('heartbeat coalesces when run is in-flight', async () => {
+    let runCount = 0;
+    const provider: RunProvider = {
+      async runOnce() {
+        runCount++;
+        await new Promise((r) => setTimeout(r, 150));
+        return { result: { status: 'completed' }, tokensUsed: 100 };
+      }
+    };
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 50,
+      tenantBudgets: new Map([['t1', { maxRunsPerHour: 100, maxTokensPerDay: 100_000 }]])
+    });
+
+    runtime.start('t1');
+    await jest.advanceTimersByTimeAsync(250);
+
+    expect(runCount).toBeLessThanOrEqual(2);
+    runtime.stop();
+  });
+
+  it('tenants without budgets still run on heartbeat', async () => {
+    const provider = createRunProvider();
+    const runtime = new AgentRuntime({
+      runProvider: provider,
+      heartbeatIntervalMs: 2000
+    });
+
+    runtime.start('t1');
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(provider.runCount).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(provider.runCount).toBe(2);
+
+    runtime.stop();
+  });
+
   it('per-tenant serialization prevents budget bypass with concurrent runs', async () => {
     let concurrency = 0;
     let maxConcurrency = 0;

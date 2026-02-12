@@ -40,6 +40,7 @@ export class AgentRuntime {
   private heartbeatHandle: ReturnType<typeof setInterval> | null = null;
   private readonly tenantStates = new Map<string, TenantState>();
   private readonly tenantLocks = new Map<string, Promise<void>>();
+  private readonly pendingHeartbeatRuns = new Set<string>();
   private eventQueue: string[] = [];
   private processingEvents = false;
   private running = false;
@@ -73,10 +74,11 @@ export class AgentRuntime {
   }
 
   /**
-   * Stops the runtime and clears the heartbeat interval.
+   * Stops the runtime and clears the heartbeat interval and event queue.
    */
   stop(): void {
     this.running = false;
+    this.eventQueue.length = 0;
     if (this.heartbeatHandle != null) {
       this.options.timers.clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
@@ -116,7 +118,15 @@ export class AgentRuntime {
     if (!this.running) {
       return;
     }
-    this.executeRun(tenantId).catch(() => {});
+    if (this.pendingHeartbeatRuns.has(tenantId)) {
+      return;
+    }
+    this.pendingHeartbeatRuns.add(tenantId);
+    this.executeRun(tenantId)
+      .catch(() => {})
+      .finally(() => {
+        this.pendingHeartbeatRuns.delete(tenantId);
+      });
   }
 
   private async withTenantLock<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
@@ -253,7 +263,13 @@ export class AgentRuntime {
   }
 
   private recordRun(tenantId: string, now: number, tokensUsed: number): void {
+    const budget = this.options.tenantBudgets?.get(tenantId);
+    if (!budget) {
+      return;
+    }
     const state = this.getTenantState(tenantId);
+    this.pruneOldRuns(state, now);
+    this.pruneOldTokens(state, now);
     state.runTimestamps.push(now);
     if (tokensUsed > 0) {
       state.tokenTimestamps.push({ tokens: tokensUsed, at: now });
