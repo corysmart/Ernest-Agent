@@ -60,34 +60,67 @@ Server listens on port 3000 (or `PORT` if set). You should see: `Server listenin
 
 ## 4. Send Requests
 
-**Health check**
+### Terminal UI (recommended)
+
+Interactive interface for all operations—no curl required:
+
 ```bash
-npm run curl:health
+npm run ernest-agent
 ```
-Expected: `{"status":"ok"}`
+
+Starts a menu-driven TUI. Connects to the server, prompts for user message and goal, and supports:
+- Run agent (full execution)
+- Dry run (with or without LLM)
+- Health check
+
+Set `AGENT_URL` for a different endpoint (default: `http://127.0.0.1:3000`).
+
+### Script-based requests
+
+**Health check**
+
+Use the TUI (`npm run ernest-agent`) and select "Health check", or `curl -s http://localhost:3000/health`.
 
 **Run agent (simple observation)**
 ```bash
-npm run curl:run
+npm run request:run
 ```
 Sends a basic user message. The agent observes the state, plans, and may call tools.
 
 **Run agent with a goal**
 ```bash
-npm run curl:run-goal
+npm run request:run-goal
 ```
 Sends observation plus a goal. The agent attempts to satisfy the goal.
 
 **Dry run (no side effects)**
 ```bash
-npm run curl:run-dry-with-llm      # Calls LLM, shows decision, skips tools (uses autoRespond)
-npm run curl:run-dry-with-llm-goal # Same with explicit goal
-npm run curl:run-dry-without-llm   # Skips LLM, uses stub decision, no API cost
+npm run request:run-dry-with-llm      # Calls LLM, shows decision, skips tools (uses autoRespond)
+npm run request:run-dry-with-llm-goal # Same with explicit goal
+npm run request:run-dry-without-llm    # Skips LLM, uses stub decision, no API cost
 ```
-Add `"dryRun": "with-llm"` or `"dryRun": "without-llm"` to the request body.
 
 **Auto-respond**
 By default, requests with a `user_message` but no explicit goal return idle. To have the server inject a default "Respond to user" goal, set `AUTO_RESPOND=true` (env) or include `"autoRespond": true` in the request body.
+
+**Follow-up prompts (multi-turn)**
+
+When the agent or Codex asks a clarifying question, pass the prior exchange in `observation.conversation_history`:
+
+```json
+{
+  "observation": {
+    "state": { "user_message": "main.ts" },
+    "conversation_history": [
+      { "role": "user", "content": "Help me refactor" },
+      { "role": "assistant", "content": "Which file would you like me to refactor?" }
+    ]
+  },
+  "goal": { "id": "g1", "title": "Respond to user" }
+}
+```
+
+Use `node scripts/run-request.cjs requests/run-once-follow-up.json` or the ernest-agent TUI, which offers **Send follow-up** after each run.
 
 ## Customizing the Request
 
@@ -98,6 +131,7 @@ Edit the JSON payloads in `requests/`:
 - `requests/run-once-dry-with-llm.json` – dry run with LLM, autoRespond (no explicit goal)
 - `requests/run-once-dry-with-llm-goal.json` – dry run with LLM and explicit goal
 - `requests/run-once-dry-without-llm.json` – dry run without LLM (stub decision, no API cost)
+- `requests/run-once-follow-up.json` – follow-up response with conversation history
 
 Example observation state:
 ```json

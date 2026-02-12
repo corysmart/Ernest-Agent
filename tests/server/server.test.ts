@@ -210,6 +210,61 @@ describe('Server', () => {
       await server.close();
     });
 
+    it('dry run with LLM injects goal when no explicit goal (LLM always responds)', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';
+      delete process.env.AUTO_RESPOND;
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: { state: { user_message: 'What can you do?' } },
+          dryRun: 'with-llm'
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('dry_run');
+      expect(body.selectedGoalId).toMatch(/^respond-/);
+      expect(body.decision?.actionType).toBe('pursue_goal');
+
+      await server.close();
+    });
+
+    it('accepts conversation_history for follow-up context', async () => {
+      process.env.LLM_PROVIDER = 'mock';
+      process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{"response":"Based on your clarification, main.ts it is."},"confidence":0.9}';
+
+      const server = await buildServer({ logger: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/agent/run-once',
+        payload: {
+          observation: {
+            state: { user_message: 'main.ts' },
+            conversation_history: [
+              { role: 'user', content: 'Help me refactor' },
+              { role: 'assistant', content: 'Which file would you like me to refactor?' }
+            ]
+          },
+          goal: { id: 'g1', title: 'Respond to user', horizon: 'short', priority: 1 },
+          dryRun: 'with-llm'
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.status).toBe('dry_run');
+      expect(body.decision?.actionPayload).toHaveProperty('response');
+
+      await server.close();
+    });
+
     it('explicit goal always wins over auto-respond', async () => {
       process.env.LLM_PROVIDER = 'mock';
       process.env.MOCK_LLM_RESPONSE = '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.9}';

@@ -15,6 +15,7 @@
     "resolveJsonModule": true
   },
   "include": [
+    "cli/**/*.ts",
     "core/**/*.ts",
     "memory/**/*.ts",
     "world/**/*.ts",
@@ -22,7 +23,8 @@
     "goals/**/*.ts",
     "agents/**/*.ts",
     "llm/**/*.ts",
-    "env/**/*.ts","runtime/**/*.ts",
+    "env/**/*.ts",
+    "runtime/**/*.ts",
     "server/**/*.ts",
     "security/**/*.ts",
     "scripts/**/*.ts"

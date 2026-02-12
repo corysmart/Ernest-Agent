@@ -19,10 +19,17 @@ import type { PromptInjectionFilter, OutputValidator } from '../core/contracts/s
 import type { AgentDecision } from '../core/contracts/agent';
 import type { ToolPermissionGate } from '../core/contracts/security';
 
+const conversationEntrySchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string()
+});
+
 const observationSchema = z.object({
   timestamp: z.number().optional(),
   state: z.record(z.unknown()),
-  events: z.array(z.string()).optional()
+  events: z.array(z.string()).optional(),
+  /** Multi-turn context. Pass prior exchange for follow-ups (e.g. Codex asked a clarifying question). */
+  conversation_history: z.array(conversationEntrySchema).optional()
 });
 
 const goalSchema = z.object({
@@ -142,12 +149,14 @@ export async function buildServer(options?: { logger?: boolean }) {
 
     const { observation, goal, tenantId: clientTenantId, dryRun, autoRespond } = parsed.data;
 
-    // Auto-inject default goal when user_message exists and no explicit goal, if auto-respond is enabled
+    // Auto-inject default goal when user_message exists and no explicit goal.
+    // Always inject for dry run with LLM (so the LLM always responds); otherwise require autoRespond.
     let effectiveGoal = goal;
     const userMessage = observation.state?.user_message;
     const hasUserMessage = typeof userMessage === 'string' && userMessage.trim().length > 0;
     const autoRespondEnabled = process.env.AUTO_RESPOND === 'true' || autoRespond === true;
-    if (!effectiveGoal && hasUserMessage && autoRespondEnabled) {
+    const dryRunWithLlm = dryRun === 'with-llm';
+    if (!effectiveGoal && hasUserMessage && (autoRespondEnabled || dryRunWithLlm)) {
       effectiveGoal = {
         id: `respond-${Date.now()}`,
         title: 'Respond to user',

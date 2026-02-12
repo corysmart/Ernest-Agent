@@ -1,7 +1,13 @@
+export interface ConversationEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface StateObservation {
   timestamp: number;
   state: Record<string, unknown>;
   events?: string[];
+  conversation_history?: ConversationEntry[];
 }
 
 export interface AgentAction {

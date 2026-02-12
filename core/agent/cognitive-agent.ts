@@ -333,6 +333,11 @@ function buildSystemPrompt(args: {
     parts.push(`Memory:\n${sanitizedMemoryContext}`);
   }
 
+  const isRespondGoal = /respond\s+to\s+user/i.test(sanitizedGoalTitle);
+  if (isRespondGoal) {
+    parts.push('Put your direct reply to the user in actionPayload.response. Use actionType pursue_goal.');
+    parts.push('Example: {"actionType":"pursue_goal","actionPayload":{"response":"Your actual reply text here."},"confidence":0.9,"reasoning":"Brief explanation"}');
+  }
   parts.push(
     'Response format: {"actionType":"<one of allowed types>","actionPayload":{},"confidence":<0-1>,"reasoning":"<optional>"}',
     'Output ONLY the JSON object. Nothing before it, nothing after.'

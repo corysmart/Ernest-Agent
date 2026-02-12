@@ -2,14 +2,28 @@
  * Lightweight server tests for observability UI routes.
  */
 
+import { mkdtempSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { buildServer } from '../../server/server';
 
 describe('Observability UI', () => {
   const originalEnv = { ...process.env };
+  let testDataDir: string;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
     process.env.LLM_PROVIDER = 'mock';
+    testDataDir = mkdtempSync(join(tmpdir(), 'observability-test-'));
+    process.env.OBS_UI_DATA_DIR = testDataDir;
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(testDataDir, { recursive: true });
+    } catch {
+      // ignore
+    }
   });
 
   afterEach(() => {
