@@ -114,11 +114,11 @@ Authenticate: run `claude auth login` or set `ANTHROPIC_API_KEY`.
 
 The agent can call these tools when given appropriate goals or when the LLM selects them.
 
-**invoke_codex** – `actionPayload: { prompt: "Your instruction" }`
+**invoke_codex** – `actionPayload: { prompt: "Your instruction" }` or `{ goal: "..." }` (goal is an alias for prompt)
 
 | Input   | Type   | Description                                         |
 |---------|--------|-----------------------------------------------------|
-| prompt  | string | Instruction (required)                             |
+| prompt  | string | Instruction (required; `goal` is accepted as alias) |
 | cwd     | string | Working directory (default: `process.cwd()` or `CODEX_CWD`) |
 
 Set `CODEX_CWD` to run Codex (and the LLM adapter) in a specific directory—e.g. a clone with `dev` checked out. Supports `~` expansion.

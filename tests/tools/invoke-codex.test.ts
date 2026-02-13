@@ -10,13 +10,32 @@ describe('invoke_codex', () => {
     mockedSpawn.mockReset();
   });
 
-  it('returns error when prompt is missing', async () => {
+  it('returns error when prompt and goal are missing', async () => {
     const result = await invokeCodex({});
-    expect(result).toEqual({
-      success: false,
-      error: 'prompt is required and must be a non-empty string'
-    });
+    expect(result.success).toBe(false);
+    expect((result as { error?: string }).error).toContain('prompt');
     expect(mockedSpawn).not.toHaveBeenCalled();
+  });
+
+  it('accepts goal as alias for prompt', async () => {
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+
+    const result = await invokeCodex({ goal: 'Do something' });
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith('codex', ['exec'], expect.any(Object));
   });
 
   it('returns error when prompt is not a string', async () => {

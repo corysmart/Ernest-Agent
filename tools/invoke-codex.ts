@@ -25,9 +25,9 @@ const WORKSPACE_ROOT = (() => {
 export const invokeCodex: ToolHandler = async (
   input: Record<string, unknown>
 ): Promise<Record<string, unknown>> => {
-  const prompt = input.prompt;
+  const prompt = input.prompt ?? input.goal;
   if (typeof prompt !== 'string' || !prompt.trim()) {
-    return { success: false, error: 'prompt is required and must be a non-empty string' };
+    return { success: false, error: 'prompt (or goal) is required and must be a non-empty string' };
   }
 
   const rawCwd = typeof input.cwd === 'string' && input.cwd.trim() ? input.cwd : WORKSPACE_ROOT;
