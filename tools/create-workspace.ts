@@ -42,6 +42,15 @@ export const createWorkspace: ToolHandler = async (
     };
   }
 
+  // Reject path segments that look like duplicates (e.g. "project 2", "folder copy")—often from iCloud or agent re-runs.
+  const lastSegment = workspacePath.split(/[/\\]/).pop() ?? workspacePath;
+  if (!SAFE_NAME.test(lastSegment)) {
+    return {
+      success: false,
+      error: 'workspace path may only contain letters, numbers, dot, dash, underscore—no spaces or suffixes like " 2" or " copy"'
+    };
+  }
+
   const workspaceRoot = getFileWorkspaceRoot();
   try {
     assertSafePath(workspaceRoot, workspacePath);

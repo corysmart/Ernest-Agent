@@ -97,6 +97,22 @@ describe('create_workspace', () => {
     expect((result as { workspaceRoot?: string }).workspaceRoot).toBe(riskyRoot);
   });
 
+  it('rejects path with spaces or duplicate-like suffixes (e.g. " 2", " copy")', async () => {
+    const safeRoot = mkdtempSync(join(tmpdir(), 'create-workspace-reject-'));
+    cleanupDirs.push(safeRoot);
+    process.env.FILE_WORKSPACE_ROOT = safeRoot;
+    delete process.env.RISKY_WORKSPACE_MODE;
+    delete process.env.FILE_WORKSPACE_MODE;
+    delete process.env.RISKY_WORKSPACE_ROOT;
+
+    const bad1 = await createWorkspace({ path: 'ernest-mail 2' });
+    expect(bad1.success).toBe(false);
+    expect((bad1 as { error?: string }).error).toContain('no spaces');
+
+    const bad2 = await createWorkspace({ path: 'project copy' });
+    expect(bad2.success).toBe(false);
+  });
+
   it('blocks non-empty existing workspace unless allowExisting=true', async () => {
     const safeRoot = mkdtempSync(join(tmpdir(), 'create-workspace-existing-'));
     cleanupDirs.push(safeRoot);

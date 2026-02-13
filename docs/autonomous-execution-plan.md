@@ -61,7 +61,7 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 ### 4b. create_workspace
 - **Purpose:** Create a new project directory (for example `ernest-mail`) before writing code.
 - **Inputs:** `name` or `path`, optional `allowExisting`, `createReadme`, `readmeTitle`.
-- **Safety:** Path must remain under resolved file workspace root.
+- **Safety:** Path must remain under resolved file workspace root. Path segments may only contain `a-zA-Z0-9._-`—rejects duplicates like `project 2` or `folder copy` (often from iCloud/agent re-runs).
 - **Returns:** `{ success, created, path, workspaceRoot, riskyMode, error? }`
 
 ### 5. Multi-act loop

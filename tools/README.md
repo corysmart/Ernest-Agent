@@ -76,6 +76,8 @@ Creates a new workspace directory under the resolved file workspace root. Useful
 
 **Returns:** `{ success, created, path, workspaceRoot, riskyMode, error? }`
 
+Path segments may only contain letters, numbers, dot, dash, underscore—no spaces or suffixes like ` 2` or ` copy` (avoids duplicates from iCloud/agent re-runs). Use the exact canonical name; if the workspace exists, pass `allowExisting: true`.
+
 ## CLI Tools (invoke_codex, invoke_claude)
 
 These tools run Codex and Claude Code from the terminal, using your existing subscriptions instead of separate API keys.
