@@ -370,9 +370,11 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
   }
 
   if (provider === 'mock') {
+    const maxInputRaw = Number(process.env.MOCK_LLM_MAX_INPUT_LENGTH ?? 200_000);
     return new MockLLMAdapter({
       response:
-        process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}'
+        process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}',
+      maxInputLength: Number.isFinite(maxInputRaw) && maxInputRaw > 0 ? maxInputRaw : 200_000
     });
   }
 

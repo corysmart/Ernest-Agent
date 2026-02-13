@@ -1,4 +1,6 @@
 import Fastify, { type FastifyRequest } from 'fastify';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 import { z } from 'zod';
 import { buildContainer } from './container';
 import { executeAgentRun } from './execute-agent-run';
@@ -126,6 +128,65 @@ function getHeartbeatIntervalMs(): number {
   return Math.floor(raw);
 }
 
+const openclawWorkspaceRoot =
+  process.env.OPENCLAW_WORKSPACE_ROOT ?? resolve(process.cwd(), 'workspace');
+
+/** Returns true if HEARTBEAT.md exists and contains unchecked tasks (`- [ ]`). */
+function hasPendingHeartbeatTasks(): boolean {
+  try {
+    const path = resolve(openclawWorkspaceRoot, 'HEARTBEAT.md');
+    const content = readFileSync(path, 'utf-8');
+    return /^\s*-\s*\[\s*\]\s+/m.test(content);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When all tasks are complete, reset checkboxes in sections marked `<!-- recurring -->`.
+ * Sections: `## Title <!-- recurring -->` or `## Recurring` (case-insensitive).
+ * Returns true if any checkboxes were reset.
+ */
+function resetRecurringHeartbeatTasks(): boolean {
+  try {
+    const path = resolve(openclawWorkspaceRoot, 'HEARTBEAT.md');
+    let content = readFileSync(path, 'utf-8');
+    const lines = content.split('\n');
+    let inRecurringSection = false;
+    let modified = false;
+    const recurringHeader = /^#{1,6}\s+.+\s+<!--\s*recurring\s*-->$/i;
+    const recurringOnlyHeader = /^#{1,6}\s+recurring(\s|$)/i;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      if (/^#{1,6}\s+/.test(line)) {
+        inRecurringSection = recurringHeader.test(line) || recurringOnlyHeader.test(line);
+      }
+      if (inRecurringSection && /^\s*-\s*\[\s*x\s*\]\s+/.test(line)) {
+        lines[i] = line.replace(/^(\s*-\s*)\[\s*x\s*\](\s+)/, '$1[ ]$2');
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      content = lines.join('\n');
+      writeFileSync(path, content, 'utf-8');
+    }
+    return modified;
+  } catch {
+    return false;
+  }
+}
+
+const heartbeatRefireEnabled =
+  process.env.HEARTBEAT_REFIRE_ON_PENDING !== 'false' && process.env.HEARTBEAT_REFIRE_ON_PENDING !== '0';
+const heartbeatResetRecurringEnabled =
+  process.env.HEARTBEAT_RESET_RECURRING !== 'false' && process.env.HEARTBEAT_RESET_RECURRING !== '0';
+const heartbeatMaxConsecutiveRefires = Math.min(
+  20,
+  Math.max(1, Number(process.env.HEARTBEAT_MAX_CONSECUTIVE_REFIRES ?? 5) || 5)
+);
+
 export async function buildServer(options?: { logger?: boolean }) {
   const requestTimeoutMs = getRunOnceTimeoutMs();
   const fastify = Fastify({
@@ -137,38 +198,61 @@ export async function buildServer(options?: { logger?: boolean }) {
   
   let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
   let heartbeatRunning = false;
+  let heartbeatConsecutiveRefires = 0;
 
   const heartbeatEnabled = process.env.HEARTBEAT_ENABLED === 'true' || process.env.HEARTBEAT_ENABLED === '1';
+
+  async function runHeartbeatTick(): Promise<void> {
+    if (heartbeatRunning) return;
+    heartbeatRunning = true;
+    let willRefire = false;
+    const requestId = `heartbeat-${Date.now()}`;
+    const goal = {
+      id: requestId,
+      title: 'Process heartbeat',
+      horizon: 'short' as const,
+      priority: 1
+    };
+    try {
+      await executeAgentRun(container, toolRunner, obsStore, {
+        observation: { timestamp: Date.now(), state: {} },
+        goal,
+        tenantId: undefined,
+        requestId,
+        dryRun: false,
+        runTimeoutMs: getRunOnceTimeoutMs(),
+        maxMultiActSteps: getMaxMultiActSteps()
+      });
+      let pending = hasPendingHeartbeatTasks();
+      if (!pending && heartbeatResetRecurringEnabled) {
+        const reset = resetRecurringHeartbeatTasks();
+        if (reset) {
+          pending = hasPendingHeartbeatTasks();
+          fastify.log?.info?.('Heartbeat reset recurring tasks');
+        }
+      }
+      if (
+        heartbeatRefireEnabled &&
+        heartbeatConsecutiveRefires < heartbeatMaxConsecutiveRefires &&
+        pending
+      ) {
+        heartbeatConsecutiveRefires += 1;
+        willRefire = true;
+        fastify.log?.info?.({ consecutiveRefires: heartbeatConsecutiveRefires }, 'Heartbeat re-firing (pending tasks)');
+      }
+    } catch (err) {
+      fastify.log?.error?.({ err }, 'Heartbeat run failed');
+    } finally {
+      heartbeatRunning = false;
+      if (!willRefire) heartbeatConsecutiveRefires = 0;
+    }
+    if (willRefire) setImmediate(() => runHeartbeatTick());
+  }
 
   if (heartbeatEnabled) {
     fastify.addHook('onReady', async () => {
       const intervalMs = getHeartbeatIntervalMs();
-      heartbeatIntervalId = setInterval(async () => {
-        if (heartbeatRunning) return;
-        heartbeatRunning = true;
-        const requestId = `heartbeat-${Date.now()}`;
-        const goal = {
-          id: requestId,
-          title: 'Process heartbeat',
-          horizon: 'short' as const,
-          priority: 1
-        };
-        try {
-          await executeAgentRun(container, toolRunner, obsStore, {
-            observation: { timestamp: Date.now(), state: {} },
-            goal,
-            tenantId: undefined,
-            requestId,
-            dryRun: false,
-            runTimeoutMs: getRunOnceTimeoutMs(),
-            maxMultiActSteps: getMaxMultiActSteps()
-          });
-        } catch (err) {
-          fastify.log?.error?.({ err }, 'Heartbeat run failed');
-        } finally {
-          heartbeatRunning = false;
-        }
-      }, intervalMs);
+      heartbeatIntervalId = setInterval(() => runHeartbeatTick(), intervalMs);
       fastify.log?.info?.({ intervalMs }, 'Heartbeat trigger started');
     });
   }

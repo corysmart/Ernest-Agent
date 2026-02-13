@@ -2,27 +2,29 @@
 
 Run this check regularly (daily or per session) to keep the workspace healthy.
 
-## Context Health
+Sections marked `<!-- recurring -->` are reset when all tasks are complete, so they run again on the next interval. One-time tasks stay checked.
+
+## Context Health <!-- recurring -->
 - [ ] I still understand the current goals and priorities
 - [ ] No critical context is missing
 - [ ] Assumptions are still valid
 
-## Memory Health
+## Memory Health <!-- recurring -->
 - [ ] `memory/files.md` reflects current memory set
 - [ ] New important learnings have been captured
 - [ ] Obsolete memory entries are marked or removed
 
-## Tool Health
+## Tool Health <!-- recurring -->
 - [ ] Required tools are reachable
 - [ ] Tool docs in `TOOLS.md` are still accurate
 - [ ] No credential/access drift detected
 
-## Process Health
+## Process Health <!-- recurring -->
 - [ ] Current workflows are still effective
 - [ ] Friction points are identified and documented
 - [ ] Next improvements are clear
 
-## Alignment
+## Alignment <!-- recurring -->
 - [ ] Work remains aligned with `AGENTS.md` purpose
 - [ ] Behavior remains aligned with `SOUL.md` values
 - [ ] Collaboration remains aligned with `USER.md` preferences

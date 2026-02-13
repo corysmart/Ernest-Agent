@@ -11,7 +11,14 @@ function expandHomePath(raw: string): string {
 }
 
 function getSafeWorkspaceRoot(): string {
-  const raw = process.env.FILE_WORKSPACE_ROOT ?? process.env.CODEX_CWD ?? process.cwd();
+  // When FILE_WORKSPACE_ROOT/CODEX_CWD are unset, align with OpenClaw workspace so HEARTBEAT.md
+  // reads/writes stay in the same directory. Explicit FILE_WORKSPACE_ROOT/CODEX_CWD take precedence.
+  const openclawRoot =
+    process.env.OPENCLAW_WORKSPACE_ROOT ?? resolve(process.cwd(), 'workspace');
+  const raw =
+    process.env.FILE_WORKSPACE_ROOT ??
+    process.env.CODEX_CWD ??
+    openclawRoot;
   const expanded = typeof raw === 'string' ? expandHomePath(raw) : process.cwd();
   return resolve(expanded);
 }

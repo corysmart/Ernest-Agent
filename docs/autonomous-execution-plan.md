@@ -19,7 +19,7 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 
 ## Env Vars
 
-- `FILE_WORKSPACE_ROOT` – root for file tools (read_file, list_dir, run_command, write_file). Fallback: `CODEX_CWD`, then `process.cwd()`.
+- `FILE_WORKSPACE_ROOT` – root for file tools (read_file, list_dir, run_command, write_file). Fallback: `CODEX_CWD`, then `OPENCLAW_WORKSPACE_ROOT`, then `./workspace`. Aligning with the OpenClaw workspace ensures HEARTBEAT.md reads/writes stay in the same directory.
 - `RISKY_WORKSPACE_MODE` – set to `true` (or `FILE_WORKSPACE_MODE=risky`) to allow broader workspace root.
 - `RISKY_WORKSPACE_ROOT` – optional explicit root for risky mode. Default: parent of safe workspace root.
 - `READ_FILE_MAX_BYTES` – max file size for read_file (default 524288).
@@ -27,6 +27,10 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 - `MAX_MULTI_ACT_STEPS` – max tool calls per run (default 10, cap 50). Set to 1 to disable multi-act.
 - `HEARTBEAT_ENABLED` – set to `true` to enable periodic heartbeat runs.
 - `HEARTBEAT_INTERVAL_MS` – interval between heartbeat runs (default 300000 = 5 min).
+- `HEARTBEAT_REFIRE_ON_PENDING` – when `true` (default), immediately re-fire another heartbeat run if HEARTBEAT.md still has unchecked tasks after a run. Set to `false` to disable.
+- `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` – cap on immediate re-fires in a row (default 5). Prevents runaway loops.
+- `HEARTBEAT_RESET_RECURRING` – when `true` (default), sections marked `## Title <!-- recurring -->` or `## Recurring` have their checkboxes unchecked when all tasks are complete, so they run again. One-time tasks stay checked.
+- `RISKY_WORKSPACE_MODE` / `RISKY_WORKSPACE_ROOT` – for bootstrapping sibling projects (e.g. `ernest-mail` next to Ernest Agent), set `RISKY_WORKSPACE_MODE=true` and `RISKY_WORKSPACE_ROOT` to the parent directory. Then `create_workspace` with name `ernest-mail` creates at `{RISKY_WORKSPACE_ROOT}/ernest-mail`.
 
 ## Pieces (in order)
 

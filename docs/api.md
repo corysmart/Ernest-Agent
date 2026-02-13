@@ -112,7 +112,7 @@ Single run-once requests can take up to 10 minutes for complex tasks. Set `RUN_O
 
 **Heartbeat (autonomous runs)**
 
-When `HEARTBEAT_ENABLED=true`, the server runs the agent periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented—a new tick skips if the previous one is still running. See `docs/autonomous-execution-plan.md` for details.
+When `HEARTBEAT_ENABLED=true`, the server runs the agent periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented. If `HEARTBEAT_REFIRE_ON_PENDING=true` (default), the server re-fires immediately when HEARTBEAT.md still has unchecked tasks, up to `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` (default 5). See `docs/autonomous-execution-plan.md` for details.
 
 ### Observability UI (when OBS_UI_ENABLED)
 
