@@ -37,6 +37,7 @@ export ANTHROPIC_EMBEDDING_MODEL=...
 # Install: npm install -g @openai/codex
 # Run codex once to authenticate
 # Leave OPENAI_API_KEY and ANTHROPIC_API_KEY unset
+# Optional: export CODEX_MODEL=gpt-5.2  to override the model
 ```
 
 **Option D: Claude Code CLI**

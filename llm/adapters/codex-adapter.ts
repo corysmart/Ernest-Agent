@@ -5,6 +5,9 @@
  * Prerequisite: npm install -g @openai/codex or brew install codex
  *
  * Prompts are passed via stdin (temp file as fd) to avoid argv exposure in process listings.
+ *
+ * Optional: CODEX_MODEL — Override the model (e.g. gpt-5.2, gpt-5-codex).
+ * See https://developers.openai.com/codex/models for available models.
  */
 
 import { spawn } from 'child_process';
@@ -106,11 +109,14 @@ export class CodexLLMAdapter implements LLMAdapter {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    const modelOverride = process.env.CODEX_MODEL?.trim();
+    const args = ['exec', ...(modelOverride ? ['--model', modelOverride] : [])];
+
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
 
-      const proc = spawn('codex', ['exec'], {
+      const proc = spawn('codex', args, {
         cwd: this.cwd,
         shell: false,
         stdio: [fd, 'pipe', 'pipe'],

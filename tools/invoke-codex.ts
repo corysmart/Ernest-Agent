@@ -62,7 +62,9 @@ export const invokeCodex: ToolHandler = async (
     let stdout = '';
     let stderr = '';
 
-    const proc = spawn('codex', ['exec'], {
+    const modelOverride = process.env.CODEX_MODEL?.trim();
+    const args = ['exec', ...(modelOverride ? ['--model', modelOverride] : [])];
+    const proc = spawn('codex', args, {
       cwd,
       shell: false,
       stdio: [fd, 'pipe', 'pipe'],

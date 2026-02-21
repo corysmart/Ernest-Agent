@@ -91,6 +91,23 @@ describe('CodexLLMAdapter', () => {
     );
   });
 
+  it('passes --model when CODEX_MODEL env is set', async () => {
+    const orig = process.env.CODEX_MODEL;
+    process.env.CODEX_MODEL = 'gpt-5.2-codex';
+    try {
+      mockedSpawn.mockReturnValue(createMockChild('x') as never);
+      const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+      await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+      expect(mockedSpawn).toHaveBeenCalledWith(
+        'codex',
+        ['exec', '--model', 'gpt-5.2-codex'],
+        expect.any(Object)
+      );
+    } finally {
+      process.env.CODEX_MODEL = orig;
+    }
+  });
+
   it('handles spawn error event', async () => {
     const mockChild = createMockChild();
     mockChild.on.mockImplementation((ev: string, fn: (err: Error) => void) => {
