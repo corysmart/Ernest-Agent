@@ -252,6 +252,10 @@ export async function buildServer(options?: { logger?: boolean }) {
   if (heartbeatEnabled) {
     fastify.addHook('onReady', async () => {
       const intervalMs = getHeartbeatIntervalMs();
+      // Kick off one run on startup so autonomous mode does not wait for the first interval.
+      setImmediate(() => {
+        void runHeartbeatTick();
+      });
       heartbeatIntervalId = setInterval(() => runHeartbeatTick(), intervalMs);
       fastify.log?.info?.({ intervalMs }, 'Heartbeat trigger started');
     });

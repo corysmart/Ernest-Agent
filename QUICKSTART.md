@@ -57,7 +57,13 @@ npm run dev
 
 Server listens on port 3000 (or `PORT` if set). You should see: `Server listening on port 3000`.
 
-**Observability UI**: In development, the dashboard is enabled by default. Visit `http://localhost:3000/ui` for Runs, Audit Events (SSE), and Docs. Set `OBS_UI_ENABLED=true` explicitly to enable in other environments. Run `npm run ui:build` first if the UI is not built.
+**Observability UI**: In development, the dashboard is enabled by default. Visit `http://localhost:3000/ui` for Runs, Audit Events (SSE), and Docs. Set `OBS_UI_ENABLED=true` explicitly to enable in other environments. Set `OBS_UI_TIMEZONE_EST=true` to render UI timestamps in Eastern time (`America/New_York`). Run `npm run ui:build` first if the UI is not built.
+
+**Autonomous local profile (recommended)**:
+```bash
+npm run dev:ui:risky
+```
+This enables risky sibling workspace mode (`/Users/cory/Documents` root), observability UI, EST/ET timestamp mode in the UI, and heartbeat execution. With heartbeat enabled, one tick is triggered immediately on startup and then continues on `HEARTBEAT_INTERVAL_MS` (default 5 min).
 
 ## 4. Send Requests
 

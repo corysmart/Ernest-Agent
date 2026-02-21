@@ -71,9 +71,9 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 - **Flow:** observe → plan → act → [observe+history → plan → act] × N until complete_run or limit.
 
 ### 6. Heartbeat trigger
-- **Purpose:** Periodically run the agent when server is up.
+- **Purpose:** Run the agent on startup and then periodically while server is up.
 - **Config:** HEARTBEAT_ENABLED (default false), HEARTBEAT_INTERVAL_MS (default 300000 = 5 min).
-- **Flow:** setInterval → build observation from OpenClaw → create default goal "Process heartbeat" → run agent (with multi-act).
+- **Flow:** on server ready, trigger one immediate heartbeat tick, then schedule setInterval → build observation from OpenClaw → create default goal "Process heartbeat" → run agent (with multi-act).
 - **Workspace:** Use OPENCLAW_WORKSPACE_ROOT for observation; FILE_WORKSPACE_ROOT for file tools when same as project.
 
 ### 7. Registry, permissions, docs

@@ -112,11 +112,13 @@ Single run-once requests can take up to 10 minutes for complex tasks. Set `RUN_O
 
 **Heartbeat (autonomous runs)**
 
-When `HEARTBEAT_ENABLED=true`, the server runs the agent periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented. If `HEARTBEAT_REFIRE_ON_PENDING=true` (default), the server re-fires immediately when HEARTBEAT.md still has unchecked tasks, up to `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` (default 5). See `docs/autonomous-execution-plan.md` for details.
+When `HEARTBEAT_ENABLED=true`, the server triggers one heartbeat run on startup and then continues periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented. If `HEARTBEAT_REFIRE_ON_PENDING=true` (default), the server re-fires immediately when HEARTBEAT.md still has unchecked tasks, up to `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` (default 5). See `docs/autonomous-execution-plan.md` for details.
 
 ### Observability UI (when OBS_UI_ENABLED)
 
 When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`).
+
+Set `OBS_UI_TIMEZONE_EST=true` (or `1`) to render UI timestamps in Eastern time (`America/New_York`). Default remains UTC ISO timestamps.
 
 **Authentication**
 
@@ -130,6 +132,7 @@ When `API_KEY` is set, `/ui` routes require `Authorization: ApiKey <key>` or `Au
 |----------|--------|--------------|
 | `/ui` | GET | Serves the React dashboard (SPA) |
 | `/ui/runs` | GET | List of recent run completions (ring buffer, default 100) |
+| `/ui/config` | GET | UI runtime config flags (for example, timezone mode) |
 | `/ui/events` | GET | Server-Sent Events stream of audit events |
 | `/ui/clear` | POST | Clear runs and events. Requires `OBS_UI_ALLOW_CLEAR=true` or non-production. |
 | `/ui/docs` | GET | List of markdown docs. Returns `[{ id, title }]` only (no path). |

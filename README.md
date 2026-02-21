@@ -103,7 +103,7 @@ Adapters implement a common `LLMAdapter` interface and fall into two categories:
 
 ## Observability UI
 
-When `OBS_UI_ENABLED=true` (default in dev), a local dashboard is served at `/ui`. Tabs: Runs (recent completions), Audit Events (SSE stream), Docs (markdown viewer).
+When `OBS_UI_ENABLED=true` (default in dev), a local dashboard is served at `/ui`. Tabs: Runs (recent completions), Audit Events (SSE stream), Docs (markdown viewer). Set `OBS_UI_TIMEZONE_EST=true` to show UI timestamps in Eastern time (`America/New_York`); default display remains UTC ISO.
 
 ![Observability dashboard](docs/Observability.png)
 
