@@ -1,9 +1,16 @@
 import { spawn } from 'child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { CodexLLMAdapter } from '../../llm/adapters/codex-adapter';
 
 jest.mock('child_process');
 
 const mockedSpawn = spawn as jest.MockedFunction<typeof spawn>;
+const ORIGINAL_CODEX_CWD = process.env.CODEX_CWD;
+const ORIGINAL_OPENCLAW_WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE_ROOT;
+const ORIGINAL_FILE_WORKSPACE_ROOT = process.env.FILE_WORKSPACE_ROOT;
+const ORIGINAL_RISKY_WORKSPACE_MODE = process.env.RISKY_WORKSPACE_MODE;
 
 function createMockChild(stdout = '') {
   const mockChild = {
@@ -28,8 +35,26 @@ function createMockChild(stdout = '') {
 }
 
 describe('CodexLLMAdapter', () => {
+  const cleanupDirs: string[] = [];
+
   beforeEach(() => {
     mockedSpawn.mockReset();
+    delete process.env.CODEX_CWD;
+    delete process.env.OPENCLAW_WORKSPACE_ROOT;
+    delete process.env.FILE_WORKSPACE_ROOT;
+    delete process.env.RISKY_WORKSPACE_MODE;
+  });
+
+  afterEach(() => {
+    process.env.CODEX_CWD = ORIGINAL_CODEX_CWD;
+    process.env.OPENCLAW_WORKSPACE_ROOT = ORIGINAL_OPENCLAW_WORKSPACE_ROOT;
+    process.env.FILE_WORKSPACE_ROOT = ORIGINAL_FILE_WORKSPACE_ROOT;
+    process.env.RISKY_WORKSPACE_MODE = ORIGINAL_RISKY_WORKSPACE_MODE;
+    while (cleanupDirs.length > 0) {
+      const dir = cleanupDirs.pop();
+      if (!dir) continue;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('throws when messages are empty', async () => {
@@ -88,6 +113,66 @@ describe('CodexLLMAdapter', () => {
       'codex',
       ['exec'],
       expect.objectContaining({ cwd: '/custom' })
+    );
+  });
+
+  it('uses heartbeat build target as default cwd when CODEX_CWD is unset', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'codex-adapter-heartbeat-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    const targetRoot = join(baseDir, 'ernest-mail');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(targetRoot, { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `ernest-mail`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    mockedSpawn.mockReturnValue(createMockChild('ok') as never);
+
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec'],
+      expect.objectContaining({ cwd: targetRoot })
+    );
+  });
+
+  it('uses prompt-derived workspace target when heartbeat target is unavailable', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'codex-adapter-prompt-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    const targetRoot = join(baseDir, 'ernest-mail');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(targetRoot, { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `missing-repo`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    mockedSpawn.mockReturnValue(createMockChild('ok') as never);
+
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({
+      messages: [{ role: 'user', content: 'Please continue implementation in repo ernest-mail' }]
+    });
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec'],
+      expect.objectContaining({ cwd: targetRoot })
     );
   });
 

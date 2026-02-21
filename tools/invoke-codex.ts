@@ -11,16 +11,12 @@
 
 import { spawn } from 'child_process';
 import { mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from 'fs';
-import { join, resolve } from 'path';
-import { tmpdir, homedir } from 'os';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { killOnAbort, KILL_GRACE_MS } from './cli-kill';
-
-const WORKSPACE_ROOT = (() => {
-  const raw = process.env.CODEX_CWD;
-  return raw ? resolve(raw.replace(/^~/, homedir())) : process.cwd();
-})();
+import { resolveDefaultCodexCwd } from './codex-cwd';
 
 export const invokeCodex: ToolHandler = async (
   input: Record<string, unknown>
@@ -30,9 +26,10 @@ export const invokeCodex: ToolHandler = async (
     return { success: false, error: 'prompt (or goal) is required and must be a non-empty string' };
   }
 
-  const rawCwd = typeof input.cwd === 'string' && input.cwd.trim() ? input.cwd : WORKSPACE_ROOT;
+  const workspaceRoot = resolveDefaultCodexCwd(prompt);
+  const rawCwd = typeof input.cwd === 'string' && input.cwd.trim() ? input.cwd : workspaceRoot;
   try {
-    assertSafePath(WORKSPACE_ROOT, rawCwd);
+    assertSafePath(workspaceRoot, rawCwd);
   } catch {
     return { success: false, error: 'Path traversal detected in cwd' };
   }

@@ -315,8 +315,11 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
 
   if (provider === 'codex') {
     const rawCwd = process.env.CODEX_CWD;
-    const cwd = rawCwd ? resolve(rawCwd.replace(/^~/, homedir())) : process.cwd();
-    return new CodexLLMAdapter({ cwd });
+    if (rawCwd) {
+      const cwd = resolve(rawCwd.replace(/^~/, homedir()));
+      return new CodexLLMAdapter({ cwd });
+    }
+    return new CodexLLMAdapter();
   }
 
   if (provider === 'openai') {
