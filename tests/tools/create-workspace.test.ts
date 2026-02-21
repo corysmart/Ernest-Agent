@@ -77,6 +77,26 @@ describe('create_workspace', () => {
     expect((result as { riskyMode?: boolean }).riskyMode).toBe(true);
   });
 
+  it('uses parent of repo when safe root ends with workspace in risky mode', async () => {
+    const parentRoot = mkdtempSync(join(tmpdir(), 'create-workspace-workspace-root-'));
+    const repoRoot = join(parentRoot, 'Ernest Agent');
+    const safeRoot = join(repoRoot, 'workspace');
+    mkdirSync(safeRoot, { recursive: true });
+    cleanupDirs.push(parentRoot);
+
+    process.env.FILE_WORKSPACE_ROOT = safeRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+    delete process.env.FILE_WORKSPACE_MODE;
+    delete process.env.RISKY_WORKSPACE_ROOT;
+
+    const result = await createWorkspace({ name: 'ernest-mail' });
+
+    expect(result.success).toBe(true);
+    expect((result as { path?: string }).path).toBe(join(parentRoot, 'ernest-mail'));
+    expect((result as { workspaceRoot?: string }).workspaceRoot).toBe(parentRoot);
+    expect((result as { riskyMode?: boolean }).riskyMode).toBe(true);
+  });
+
   it('uses explicit RISKY_WORKSPACE_ROOT when risky mode is enabled', async () => {
     const baseRoot = mkdtempSync(join(tmpdir(), 'create-workspace-explicit-'));
     const safeRoot = join(baseRoot, 'ernest-agent');

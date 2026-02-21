@@ -3,7 +3,7 @@
  * Used by all file-based tools to enforce path safety.
  */
 
-import { dirname, resolve } from 'path';
+import { basename, dirname, resolve } from 'path';
 import { homedir } from 'os';
 
 function expandHomePath(raw: string): string {
@@ -45,6 +45,12 @@ export function getFileWorkspaceRoot(): string {
   const rawRiskyRoot = process.env.RISKY_WORKSPACE_ROOT;
   if (typeof rawRiskyRoot === 'string' && rawRiskyRoot.trim()) {
     return resolve(expandHomePath(rawRiskyRoot.trim()));
+  }
+
+  // Common setup: OPENCLAW_WORKSPACE_ROOT defaults to "<repo>/workspace".
+  // In risky mode, sibling project bootstrapping should happen next to the repo.
+  if (basename(safeRoot) === 'workspace') {
+    return dirname(dirname(safeRoot));
   }
 
   return dirname(safeRoot);
