@@ -143,6 +143,20 @@ describe('Observability UI', () => {
       await server.close();
     });
 
+    it('GET /ui/config exposes EST flag state', async () => {
+      process.env.OBS_UI_ENABLED = 'true';
+      process.env.OBS_UI_TIMEZONE_EST = 'true';
+
+      const server = await buildServer({ logger: false });
+
+      const res = await server.inject({ method: 'GET', url: '/ui/config' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body).toEqual({ useEstTimezone: true });
+
+      await server.close();
+    });
+
     it('GET /ui/docs/:id returns content for valid doc', async () => {
       const server = await buildServer({ logger: false });
 

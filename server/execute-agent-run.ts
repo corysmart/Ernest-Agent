@@ -25,6 +25,8 @@ import type { SandboxedToolRunner } from '../security/sandboxed-tool-runner';
 import type { Container } from '../core/di/container';
 import type { ObservabilityStore } from './observability-store';
 import { createObservabilityAuditLogger } from './observability-audit-forwarder';
+import { getFileWorkspaceRoot, isRiskyWorkspaceModeEnabled } from '../tools/file-workspace';
+import { resolve } from 'path';
 
 export interface ExecuteAgentRunParams {
   observation: {
@@ -87,12 +89,22 @@ export async function executeAgentRun(
   }
 
   const openclaw = new OpenClawWorkspaceAdapter({
-    workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? '~/.openclaw/workspace',
+    // Default to repo-local workspace/ for easier local development.
+    workspaceRoot: process.env.OPENCLAW_WORKSPACE_ROOT ?? resolve(process.cwd(), 'workspace'),
     includeDailyMemory: true
   });
+  const fileWorkspaceRoot = getFileWorkspaceRoot();
+  const riskyMode = isRiskyWorkspaceModeEnabled();
+  const requestState = {
+    ...observation.state,
+    _file_workspace_root: fileWorkspaceRoot,
+    ...(riskyMode && {
+      _create_workspace_hint: 'When bootstrapping sibling repos (e.g. ernest-mail), use create_workspace with path "ernest-mail" only—never "workspace/ernest-mail" or suffixed variants like "ernest-mail 2". Use the exact canonical name; if the workspace exists, pass allowExisting: true. For list_dir, read_file, run_command: use path "ernest-mail" (sibling dir), not "workspace/ernest-mail". run_command cwd should be the resolved project path. HEARTBEAT updates must always target the canonical file /Users/cory/Documents/Ernest Agent/workspace/HEARTBEAT.md; never create or write ernest-mail/workspace/HEARTBEAT.md.'
+    })
+  };
   const requestAdapter = new RequestObservationAdapter({
     timestamp: observation.timestamp ?? Date.now(),
-    state: observation.state ?? {},
+    state: requestState,
     events: observation.events,
     conversation_history: observation.conversation_history
   });

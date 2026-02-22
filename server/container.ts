@@ -238,6 +238,7 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
     allow: [
       'pursue_goal', 'invoke_codex', 'invoke_claude', 'send_email', 'schedule_task', 'get_recent_runs',
       'create_test_email_account', 'save_email_config', 'read_file', 'list_dir', 'run_command', 'write_file',
+      'create_workspace',
       'complete_run'
     ]
   });
@@ -314,8 +315,11 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
 
   if (provider === 'codex') {
     const rawCwd = process.env.CODEX_CWD;
-    const cwd = rawCwd ? resolve(rawCwd.replace(/^~/, homedir())) : process.cwd();
-    return new CodexLLMAdapter({ cwd });
+    if (rawCwd) {
+      const cwd = resolve(rawCwd.replace(/^~/, homedir()));
+      return new CodexLLMAdapter({ cwd });
+    }
+    return new CodexLLMAdapter();
   }
 
   if (provider === 'openai') {
@@ -369,9 +373,11 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
   }
 
   if (provider === 'mock') {
+    const maxInputRaw = Number(process.env.MOCK_LLM_MAX_INPUT_LENGTH ?? 200_000);
     return new MockLLMAdapter({
       response:
-        process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}'
+        process.env.MOCK_LLM_RESPONSE ?? '{"actionType":"pursue_goal","actionPayload":{},"confidence":0.5}',
+      maxInputLength: Number.isFinite(maxInputRaw) && maxInputRaw > 0 ? maxInputRaw : 200_000
     });
   }
 

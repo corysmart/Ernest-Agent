@@ -10,6 +10,7 @@ import { resolve } from 'path';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { getFileWorkspaceRoot } from './file-workspace';
+import { getHeartbeatPathError } from './heartbeat-path-guard';
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.RUN_COMMAND_TIMEOUT_MS) || 60000; // 60s
 
@@ -34,6 +35,15 @@ export const runCommand: ToolHandler = async (
   const timeoutMs = typeof input.timeoutMs === 'number' && input.timeoutMs > 0
     ? input.timeoutMs
     : DEFAULT_TIMEOUT_MS;
+
+  const heartbeatRefMatch = command.match(/(?:^|[\s"'`])(?:\.\/)?workspace\/HEARTBEAT\.md(?:$|[\s"'`])/);
+  if (heartbeatRefMatch) {
+    const impliedHeartbeatPath = resolve(cwd, 'workspace/HEARTBEAT.md');
+    const heartbeatPathError = getHeartbeatPathError(impliedHeartbeatPath);
+    if (heartbeatPathError) {
+      return { success: false, error: heartbeatPathError };
+    }
+  }
 
   return new Promise((resolvePromise) => {
     let stdout = '';

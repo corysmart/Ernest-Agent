@@ -1,9 +1,17 @@
 import { spawn } from 'child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { CodexLLMAdapter } from '../../llm/adapters/codex-adapter';
 
 jest.mock('child_process');
 
 const mockedSpawn = spawn as jest.MockedFunction<typeof spawn>;
+const ORIGINAL_CODEX_CWD = process.env.CODEX_CWD;
+const ORIGINAL_OPENCLAW_WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE_ROOT;
+const ORIGINAL_FILE_WORKSPACE_ROOT = process.env.FILE_WORKSPACE_ROOT;
+const ORIGINAL_RISKY_WORKSPACE_MODE = process.env.RISKY_WORKSPACE_MODE;
+const ORIGINAL_CODEX_SANDBOX_MODE = process.env.CODEX_SANDBOX_MODE;
 
 function createMockChild(stdout = '') {
   const mockChild = {
@@ -28,8 +36,28 @@ function createMockChild(stdout = '') {
 }
 
 describe('CodexLLMAdapter', () => {
+  const cleanupDirs: string[] = [];
+
   beforeEach(() => {
     mockedSpawn.mockReset();
+    delete process.env.CODEX_CWD;
+    delete process.env.OPENCLAW_WORKSPACE_ROOT;
+    delete process.env.FILE_WORKSPACE_ROOT;
+    delete process.env.RISKY_WORKSPACE_MODE;
+    delete process.env.CODEX_SANDBOX_MODE;
+  });
+
+  afterEach(() => {
+    process.env.CODEX_CWD = ORIGINAL_CODEX_CWD;
+    process.env.OPENCLAW_WORKSPACE_ROOT = ORIGINAL_OPENCLAW_WORKSPACE_ROOT;
+    process.env.FILE_WORKSPACE_ROOT = ORIGINAL_FILE_WORKSPACE_ROOT;
+    process.env.RISKY_WORKSPACE_MODE = ORIGINAL_RISKY_WORKSPACE_MODE;
+    process.env.CODEX_SANDBOX_MODE = ORIGINAL_CODEX_SANDBOX_MODE;
+    while (cleanupDirs.length > 0) {
+      const dir = cleanupDirs.pop();
+      if (!dir) continue;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('throws when messages are empty', async () => {
@@ -88,6 +116,93 @@ describe('CodexLLMAdapter', () => {
       'codex',
       ['exec'],
       expect.objectContaining({ cwd: '/custom' })
+    );
+  });
+
+  it('uses risky workspace root as default cwd when risky mode is enabled', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'codex-adapter-heartbeat-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `ernest-mail`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    mockedSpawn.mockReturnValue(createMockChild('ok') as never);
+
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
+    );
+  });
+
+  it('uses risky workspace root instead of prompt-derived target in risky mode', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'codex-adapter-prompt-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `missing-repo`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    mockedSpawn.mockReturnValue(createMockChild('ok') as never);
+
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({
+      messages: [{ role: 'user', content: 'Please continue implementation in repo ernest-mail' }]
+    });
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
+    );
+  });
+
+  it('passes --model when CODEX_MODEL env is set', async () => {
+    const orig = process.env.CODEX_MODEL;
+    process.env.CODEX_MODEL = 'gpt-5.2-codex';
+    try {
+      mockedSpawn.mockReturnValue(createMockChild('x') as never);
+      const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+      await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+      expect(mockedSpawn).toHaveBeenCalledWith(
+        'codex',
+        ['exec', '--model', 'gpt-5.2-codex'],
+        expect.any(Object)
+      );
+    } finally {
+      process.env.CODEX_MODEL = orig;
+    }
+  });
+
+  it('passes sandbox flag when configured', async () => {
+    process.env.CODEX_SANDBOX_MODE = 'workspace-write';
+    mockedSpawn.mockReturnValue(createMockChild('x') as never);
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write'],
+      expect.any(Object)
     );
   });
 

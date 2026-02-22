@@ -6,6 +6,16 @@ Tools the agent can invoke when given appropriate goals.
 
 These tools let the agent read, list, run commands, and write files within a workspace. They are scoped by `FILE_WORKSPACE_ROOT` (fallback: `CODEX_CWD`, then `process.cwd()`). Supports `~` expansion.
 
+Default mode is safe. To intentionally allow sibling project bootstrapping (e.g., creating `ernest-mail` next to this repo), enable risky mode:
+
+- `RISKY_WORKSPACE_MODE=true` or `FILE_WORKSPACE_MODE=risky`
+- Optional `RISKY_WORKSPACE_ROOT=/path/to/repositories` (defaults to parent of safe root)
+
+Heartbeat safety guard:
+
+- HEARTBEAT updates must target the canonical file under `OPENCLAW_WORKSPACE_ROOT/HEARTBEAT.md`.
+- Nested paths like `<sibling-repo>/workspace/HEARTBEAT.md` are rejected by tool guards.
+
 ### read_file
 
 Read file contents from the workspace. Used to inspect HEARTBEAT.md, source files, etc.
@@ -57,6 +67,22 @@ Write content to a file. Used to update HEARTBEAT.md or task state.
 
 Creates parent directories if needed.
 
+### create_workspace
+
+Creates a new workspace directory under the resolved file workspace root. Useful for starting a separate project repo.
+
+| Input       | Type    | Description                                           |
+|-------------|---------|-------------------------------------------------------|
+| name        | string  | Workspace name (used when `path` not provided)        |
+| path        | string  | Relative path under workspace root (overrides `name`) |
+| allowExisting | boolean | Allow non-empty existing workspace (default false)  |
+| createReadme | boolean | Create `README.md` if missing (default true)         |
+| readmeTitle | string  | Optional README title                                 |
+
+**Returns:** `{ success, created, path, workspaceRoot, riskyMode, error? }`
+
+Path segments may only contain letters, numbers, dot, dash, underscore—no spaces or suffixes like ` 2` or ` copy` (avoids duplicates from iCloud/agent re-runs). Use the exact canonical name; if the workspace exists, pass `allowExisting: true`.
+
 ## CLI Tools (invoke_codex, invoke_claude)
 
 These tools run Codex and Claude Code from the terminal, using your existing subscriptions instead of separate API keys.
@@ -93,14 +119,23 @@ Authenticate: run `claude auth login` or set `ANTHROPIC_API_KEY`.
 
 The agent can call these tools when given appropriate goals or when the LLM selects them.
 
-**invoke_codex** – `actionPayload: { prompt: "Your instruction" }`
+**invoke_codex** – `actionPayload: { prompt: "Your instruction" }` or `{ goal: "..." }` (goal is an alias for prompt)
 
 | Input   | Type   | Description                                         |
 |---------|--------|-----------------------------------------------------|
-| prompt  | string | Instruction (required)                             |
+| prompt  | string | Instruction (required; `goal` is accepted as alias) |
 | cwd     | string | Working directory (default: `process.cwd()` or `CODEX_CWD`) |
 
 Set `CODEX_CWD` to run Codex (and the LLM adapter) in a specific directory—e.g. a clone with `dev` checked out. Supports `~` expansion.
+
+Optional Codex execution controls:
+
+- `CODEX_SANDBOX_MODE` – passed as `--sandbox <value>` (for example `workspace-write`).
+
+Risky mode Codex defaults:
+
+- In risky mode, Codex default cwd resolves to the risky workspace root so one run can operate across sibling repos.
+- In risky mode, Codex also appends `--skip-git-repo-check` for parent-directory execution.
 
 ```bash
 # Equivalent terminal command

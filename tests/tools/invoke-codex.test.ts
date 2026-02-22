@@ -1,22 +1,72 @@
 import { spawn } from 'child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { invokeCodex } from '../../tools/invoke-codex';
 
 jest.mock('child_process');
 
 const mockedSpawn = spawn as jest.MockedFunction<typeof spawn>;
+const ORIGINAL_CODEX_CWD = process.env.CODEX_CWD;
+const ORIGINAL_OPENCLAW_WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE_ROOT;
+const ORIGINAL_FILE_WORKSPACE_ROOT = process.env.FILE_WORKSPACE_ROOT;
+const ORIGINAL_RISKY_WORKSPACE_MODE = process.env.RISKY_WORKSPACE_MODE;
+const ORIGINAL_RISKY_WORKSPACE_ROOT = process.env.RISKY_WORKSPACE_ROOT;
+const ORIGINAL_CODEX_SANDBOX_MODE = process.env.CODEX_SANDBOX_MODE;
 
 describe('invoke_codex', () => {
+  const cleanupDirs: string[] = [];
+
   beforeEach(() => {
     mockedSpawn.mockReset();
+    delete process.env.CODEX_CWD;
+    delete process.env.OPENCLAW_WORKSPACE_ROOT;
+    delete process.env.FILE_WORKSPACE_ROOT;
+    delete process.env.RISKY_WORKSPACE_MODE;
+    delete process.env.RISKY_WORKSPACE_ROOT;
+    delete process.env.CODEX_SANDBOX_MODE;
   });
 
-  it('returns error when prompt is missing', async () => {
+  afterEach(() => {
+    process.env.CODEX_CWD = ORIGINAL_CODEX_CWD;
+    process.env.OPENCLAW_WORKSPACE_ROOT = ORIGINAL_OPENCLAW_WORKSPACE_ROOT;
+    process.env.FILE_WORKSPACE_ROOT = ORIGINAL_FILE_WORKSPACE_ROOT;
+    process.env.RISKY_WORKSPACE_MODE = ORIGINAL_RISKY_WORKSPACE_MODE;
+    process.env.RISKY_WORKSPACE_ROOT = ORIGINAL_RISKY_WORKSPACE_ROOT;
+    process.env.CODEX_SANDBOX_MODE = ORIGINAL_CODEX_SANDBOX_MODE;
+    while (cleanupDirs.length > 0) {
+      const dir = cleanupDirs.pop();
+      if (!dir) continue;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns error when prompt and goal are missing', async () => {
     const result = await invokeCodex({});
-    expect(result).toEqual({
-      success: false,
-      error: 'prompt is required and must be a non-empty string'
-    });
+    expect(result.success).toBe(false);
+    expect((result as { error?: string }).error).toContain('prompt');
     expect(mockedSpawn).not.toHaveBeenCalled();
+  });
+
+  it('accepts goal as alias for prompt', async () => {
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+
+    const result = await invokeCodex({ goal: 'Do something' });
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith('codex', ['exec'], expect.any(Object));
   });
 
   it('returns error when prompt is not a string', async () => {
@@ -126,6 +176,92 @@ describe('invoke_codex', () => {
     expect(mockedSpawn).not.toHaveBeenCalled();
   });
 
+  it('uses risky workspace root as default cwd when risky mode is enabled', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'invoke-codex-heartbeat-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `ernest-mail`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as never);
+    (mockChild.stdout as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+    (mockChild.stderr as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+
+    const result = await invokeCodex({ prompt: 'Use heartbeat target cwd' });
+
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
+    );
+  });
+
+  it('uses risky workspace root instead of prompt-derived target in risky mode', async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), 'invoke-codex-prompt-'));
+    cleanupDirs.push(baseDir);
+    const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
+    mkdirSync(workspaceRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
+    writeFileSync(
+      join(workspaceRoot, 'HEARTBEAT.md'),
+      '# HEARTBEAT: Build `missing-repo`\n',
+      'utf8'
+    );
+
+    process.env.OPENCLAW_WORKSPACE_ROOT = workspaceRoot;
+    process.env.FILE_WORKSPACE_ROOT = workspaceRoot;
+    process.env.RISKY_WORKSPACE_MODE = 'true';
+
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as never);
+    (mockChild.stdout as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+    (mockChild.stderr as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+
+    const result = await invokeCodex({ prompt: 'Continue work in repo ernest-mail and fix tests' });
+
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
+    );
+  });
+
   it('returns spawn error when codex is not found', async () => {
     mockedSpawn.mockImplementation(() => {
       const mockChild: {
@@ -152,5 +288,34 @@ describe('invoke_codex', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('ENOENT');
+  });
+
+  it('passes sandbox flag when configured', async () => {
+    process.env.CODEX_SANDBOX_MODE = 'workspace-write';
+
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+    (mockChild.stdout as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+    (mockChild.stderr as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+
+    const result = await invokeCodex({ prompt: 'Check flags' });
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write'],
+      expect.any(Object)
+    );
   });
 });

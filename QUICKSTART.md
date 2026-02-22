@@ -37,6 +37,7 @@ export ANTHROPIC_EMBEDDING_MODEL=...
 # Install: npm install -g @openai/codex
 # Run codex once to authenticate
 # Leave OPENAI_API_KEY and ANTHROPIC_API_KEY unset
+# Optional: export CODEX_MODEL=gpt-5.2  to override the model
 ```
 
 **Option D: Claude Code CLI**
@@ -56,7 +57,15 @@ npm run dev
 
 Server listens on port 3000 (or `PORT` if set). You should see: `Server listening on port 3000`.
 
-**Observability UI**: In development, the dashboard is enabled by default. Visit `http://localhost:3000/ui` for Runs, Audit Events (SSE), and Docs. Set `OBS_UI_ENABLED=true` explicitly to enable in other environments. Run `npm run ui:build` first if the UI is not built.
+**Observability UI**: In development, the dashboard is enabled by default. Visit `http://localhost:3000/ui` for Runs, Audit Events (SSE), and Docs. Set `OBS_UI_ENABLED=true` explicitly to enable in other environments. Set `OBS_UI_TIMEZONE_EST=true` to render UI timestamps in Eastern time (`America/New_York`). Run `npm run ui:build` first if the UI is not built.
+
+**Autonomous local profile (recommended)**:
+```bash
+npm run dev:ui:risky
+```
+This profile now builds before startup, then enables risky sibling workspace mode (`/Users/cory/Documents` root), Codex writable sandbox mode, observability UI, EST/ET timestamp mode in the UI, and heartbeat execution. With heartbeat enabled, one tick is triggered immediately on startup and then continues on `HEARTBEAT_INTERVAL_MS` (default 5 min).
+
+In risky mode, Codex runs from the risky workspace root and automatically uses flags compatible with parent-directory execution (`--sandbox workspace-write`, `--skip-git-repo-check`), so it can update both sibling repos (for example `ernest-mail`) and canonical heartbeat files under `Ernest Agent/workspace`.
 
 ## 4. Send Requests
 

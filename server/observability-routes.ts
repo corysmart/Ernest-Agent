@@ -107,6 +107,11 @@ export async function registerObservabilityRoutes(
 
   fastify.get('/ui/active-runs', async () => obsStore.getActiveRuns());
 
+  fastify.get('/ui/config', async () => ({
+    useEstTimezone:
+      process.env.OBS_UI_TIMEZONE_EST === 'true' || process.env.OBS_UI_TIMEZONE_EST === '1'
+  }));
+
   fastify.get('/ui/events', async (request, reply) => {
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',

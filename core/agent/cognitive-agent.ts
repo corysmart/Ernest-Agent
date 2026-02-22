@@ -269,6 +269,10 @@ export class CognitiveAgent {
           observation: actionResult.observation
         });
 
+        // pursue_goal is an acknowledgement-style tool; repeating it in multi-act mode
+        // creates loops with no additional side effects.
+        if (action.type === 'pursue_goal') break;
+
         if (step + 1 >= multiActMaxSteps) break;
 
         const allowedTypes = this.options.permissionGate.getAllowedTypes?.() ?? null;
@@ -368,7 +372,9 @@ function buildSystemPrompt(args: {
     'You are an agent. Your response must be ONLY a valid JSON object—no other text, no markdown, no explanation. The system parses your output with JSON.parse(); any non-JSON text will cause a failure.',
     `Goal: ${sanitizedGoalTitle}${sanitizedGoalDesc ? ` - ${sanitizedGoalDesc}` : ''}`,
     `WorldState: ${JSON.stringify(args.worldState)}`,
-    `SelfModel: ${JSON.stringify(args.selfSnapshot)}`
+    `SelfModel: ${JSON.stringify(args.selfSnapshot)}`,
+    'You do not edit files directly. To modify files or run commands, choose tool actions such as write_file, run_command, list_dir, read_file, or create_workspace.',
+    'Do not claim filesystem limitations unless a prior tool result explicitly reported a write/permission error.'
   ];
 
   if (args.allowedActionTypes && args.allowedActionTypes.length > 0) {

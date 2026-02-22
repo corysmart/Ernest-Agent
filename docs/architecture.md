@@ -49,6 +49,8 @@ The loop may exit early on error, idle (no goal), completion, or dry run.
 
 `AgentRuntime` orchestrates runs via a heartbeat and an event queue. Tenants are processed serially per tenant. Per-tenant budgets (max runs/hour, max tokens/day) block runs when exceeded. A circuit breaker opens on consecutive failures and blocks further runs until cooldown. A kill switch stops the runtime immediately. Run timeouts trigger abort and SIGTERM→SIGKILL escalation.
 
+Server-level run orchestration also applies a workspace run lock for `/agent/run-once` and heartbeat-triggered runs. This prevents overlapping runs from concurrently mutating the same workspace, includes stale/dead-owner lock recovery, and returns a conflict response when another run currently holds the lock.
+
 ### Observation Pipeline
 
 `ObservationAdapter` implementations yield text-based observations for the agent. `ObservationNormalizer` produces `StateObservation` from raw inputs with configurable size caps and safe object validation. Only text-safe, structured values are passed into the cognitive loop; non-serializable or unsafe objects are rejected.

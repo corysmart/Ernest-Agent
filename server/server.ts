@@ -1,10 +1,14 @@
 import Fastify, { type FastifyRequest } from 'fastify';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
 import { z } from 'zod';
 import { buildContainer } from './container';
 import { executeAgentRun } from './execute-agent-run';
 import { assertSafeObject } from '../security/validation';
 import { ObservabilityStore } from './observability-store';
 import { registerObservabilityRoutes } from './observability-routes';
+import { getFileWorkspaceRoot } from '../tools/file-workspace';
+import { acquireWorkspaceRunLock, readWorkspaceRunLockOwner } from '../runtime/workspace-run-lock';
 
 const conversationEntrySchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -117,6 +121,9 @@ function getMaxMultiActSteps(): number {
 }
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 300_000; // 5 min
+const DEFAULT_RUN_LOCK_WAIT_MS = 5000;
+const DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS = 500;
+const DEFAULT_RUN_LOCK_STALE_MS = 15 * 60 * 1000;
 
 function getHeartbeatIntervalMs(): number {
   const raw = Number(process.env.HEARTBEAT_INTERVAL_MS ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
@@ -125,6 +132,93 @@ function getHeartbeatIntervalMs(): number {
   }
   return Math.floor(raw);
 }
+
+function getRunLockEnabled(): boolean {
+  return process.env.RUN_LOCK_ENABLED !== 'false' && process.env.RUN_LOCK_ENABLED !== '0';
+}
+
+function getRunLockWaitMs(): number {
+  const raw = Number(process.env.RUN_LOCK_WAIT_MS ?? DEFAULT_RUN_LOCK_WAIT_MS);
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_RUN_LOCK_WAIT_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getHeartbeatRunLockWaitMs(): number {
+  const raw = Number(process.env.HEARTBEAT_RUN_LOCK_WAIT_MS ?? DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS);
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getRunLockStaleMs(): number {
+  const raw = Number(process.env.RUN_LOCK_STALE_MS ?? DEFAULT_RUN_LOCK_STALE_MS);
+  if (!Number.isFinite(raw) || raw < 1000) {
+    return DEFAULT_RUN_LOCK_STALE_MS;
+  }
+  return Math.floor(raw);
+}
+
+const openclawWorkspaceRoot =
+  process.env.OPENCLAW_WORKSPACE_ROOT ?? resolve(process.cwd(), 'workspace');
+
+/** Returns true if HEARTBEAT.md exists and contains unchecked tasks (`- [ ]`). */
+function hasPendingHeartbeatTasks(): boolean {
+  try {
+    const path = resolve(openclawWorkspaceRoot, 'HEARTBEAT.md');
+    const content = readFileSync(path, 'utf-8');
+    return /^\s*-\s*\[\s*\]\s+/m.test(content);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When all tasks are complete, reset checkboxes in sections marked `<!-- recurring -->`.
+ * Sections: `## Title <!-- recurring -->` or `## Recurring` (case-insensitive).
+ * Returns true if any checkboxes were reset.
+ */
+function resetRecurringHeartbeatTasks(): boolean {
+  try {
+    const path = resolve(openclawWorkspaceRoot, 'HEARTBEAT.md');
+    let content = readFileSync(path, 'utf-8');
+    const lines = content.split('\n');
+    let inRecurringSection = false;
+    let modified = false;
+    const recurringHeader = /^#{1,6}\s+.+\s+<!--\s*recurring\s*-->$/i;
+    const recurringOnlyHeader = /^#{1,6}\s+recurring(\s|$)/i;
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      if (/^#{1,6}\s+/.test(line)) {
+        inRecurringSection = recurringHeader.test(line) || recurringOnlyHeader.test(line);
+      }
+      if (inRecurringSection && /^\s*-\s*\[\s*x\s*\]\s+/.test(line)) {
+        lines[i] = line.replace(/^(\s*-\s*)\[\s*x\s*\](\s+)/, '$1[ ]$2');
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      content = lines.join('\n');
+      writeFileSync(path, content, 'utf-8');
+    }
+    return modified;
+  } catch {
+    return false;
+  }
+}
+
+const heartbeatRefireEnabled =
+  process.env.HEARTBEAT_REFIRE_ON_PENDING !== 'false' && process.env.HEARTBEAT_REFIRE_ON_PENDING !== '0';
+const heartbeatResetRecurringEnabled =
+  process.env.HEARTBEAT_RESET_RECURRING !== 'false' && process.env.HEARTBEAT_RESET_RECURRING !== '0';
+const heartbeatMaxConsecutiveRefires = Math.min(
+  20,
+  Math.max(1, Number(process.env.HEARTBEAT_MAX_CONSECUTIVE_REFIRES ?? 5) || 5)
+);
 
 export async function buildServer(options?: { logger?: boolean }) {
   const requestTimeoutMs = getRunOnceTimeoutMs();
@@ -137,22 +231,38 @@ export async function buildServer(options?: { logger?: boolean }) {
   
   let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
   let heartbeatRunning = false;
+  let heartbeatConsecutiveRefires = 0;
 
   const heartbeatEnabled = process.env.HEARTBEAT_ENABLED === 'true' || process.env.HEARTBEAT_ENABLED === '1';
 
-  if (heartbeatEnabled) {
-    fastify.addHook('onReady', async () => {
-      const intervalMs = getHeartbeatIntervalMs();
-      heartbeatIntervalId = setInterval(async () => {
-        if (heartbeatRunning) return;
-        heartbeatRunning = true;
-        const requestId = `heartbeat-${Date.now()}`;
-        const goal = {
-          id: requestId,
-          title: 'Process heartbeat',
-          horizon: 'short' as const,
-          priority: 1
-        };
+  async function runHeartbeatTick(): Promise<void> {
+    if (heartbeatRunning) return;
+    heartbeatRunning = true;
+    let willRefire = false;
+    const requestId = `heartbeat-${Date.now()}`;
+    const goal = {
+      id: requestId,
+      title: 'Process heartbeat',
+      horizon: 'short' as const,
+      priority: 1
+    };
+    try {
+      const workspaceRoot = getFileWorkspaceRoot();
+      if (getRunLockEnabled()) {
+        const lock = await acquireWorkspaceRunLock({
+          workspaceRoot,
+          owner: `heartbeat:${requestId}`,
+          waitMs: getHeartbeatRunLockWaitMs(),
+          staleMs: getRunLockStaleMs()
+        });
+        if (!lock) {
+          const owner = readWorkspaceRunLockOwner(workspaceRoot);
+          fastify.log?.info?.(
+            { owner: owner ?? 'unknown' },
+            'Heartbeat skipped: workspace run lock is held by another run'
+          );
+          return;
+        }
         try {
           await executeAgentRun(container, toolRunner, obsStore, {
             observation: { timestamp: Date.now(), state: {} },
@@ -163,12 +273,54 @@ export async function buildServer(options?: { logger?: boolean }) {
             runTimeoutMs: getRunOnceTimeoutMs(),
             maxMultiActSteps: getMaxMultiActSteps()
           });
-        } catch (err) {
-          fastify.log?.error?.({ err }, 'Heartbeat run failed');
         } finally {
-          heartbeatRunning = false;
+          lock.release();
         }
-      }, intervalMs);
+      } else {
+        await executeAgentRun(container, toolRunner, obsStore, {
+          observation: { timestamp: Date.now(), state: {} },
+          goal,
+          tenantId: undefined,
+          requestId,
+          dryRun: false,
+          runTimeoutMs: getRunOnceTimeoutMs(),
+          maxMultiActSteps: getMaxMultiActSteps()
+        });
+      }
+      let pending = hasPendingHeartbeatTasks();
+      if (!pending && heartbeatResetRecurringEnabled) {
+        const reset = resetRecurringHeartbeatTasks();
+        if (reset) {
+          pending = hasPendingHeartbeatTasks();
+          fastify.log?.info?.('Heartbeat reset recurring tasks');
+        }
+      }
+      if (
+        heartbeatRefireEnabled &&
+        heartbeatConsecutiveRefires < heartbeatMaxConsecutiveRefires &&
+        pending
+      ) {
+        heartbeatConsecutiveRefires += 1;
+        willRefire = true;
+        fastify.log?.info?.({ consecutiveRefires: heartbeatConsecutiveRefires }, 'Heartbeat re-firing (pending tasks)');
+      }
+    } catch (err) {
+      fastify.log?.error?.({ err }, 'Heartbeat run failed');
+    } finally {
+      heartbeatRunning = false;
+      if (!willRefire) heartbeatConsecutiveRefires = 0;
+    }
+    if (willRefire) setImmediate(() => runHeartbeatTick());
+  }
+
+  if (heartbeatEnabled) {
+    fastify.addHook('onReady', async () => {
+      const intervalMs = getHeartbeatIntervalMs();
+      // Kick off one run on startup so autonomous mode does not wait for the first interval.
+      setImmediate(() => {
+        void runHeartbeatTick();
+      });
+      heartbeatIntervalId = setInterval(() => runHeartbeatTick(), intervalMs);
       fastify.log?.info?.({ intervalMs }, 'Heartbeat trigger started');
     });
   }
@@ -263,20 +415,56 @@ export async function buildServer(options?: { logger?: boolean }) {
     
     let runResult;
     try {
-      runResult = await executeAgentRun(container, toolRunner, obsStore, {
-        observation: {
-          timestamp: observation.timestamp,
-          state: observation.state ?? {},
-          events: observation.events,
-          conversation_history: observation.conversation_history
-        },
-        goal: effectiveGoal,
-        tenantId,
-        requestId,
-        dryRun: dryRun ?? false,
-        runTimeoutMs: getRunOnceTimeoutMs(),
-        maxMultiActSteps: getMaxMultiActSteps()
-      });
+      if (getRunLockEnabled()) {
+        const workspaceRoot = getFileWorkspaceRoot();
+        const lock = await acquireWorkspaceRunLock({
+          workspaceRoot,
+          owner: `api:${requestId}`,
+          waitMs: getRunLockWaitMs(),
+          staleMs: getRunLockStaleMs()
+        });
+        if (!lock) {
+          const owner = readWorkspaceRunLockOwner(workspaceRoot);
+          reply.code(409).send({
+            error: 'Workspace is busy with another agent run',
+            owner: owner ?? 'unknown'
+          });
+          return;
+        }
+        try {
+          runResult = await executeAgentRun(container, toolRunner, obsStore, {
+            observation: {
+              timestamp: observation.timestamp,
+              state: observation.state ?? {},
+              events: observation.events,
+              conversation_history: observation.conversation_history
+            },
+            goal: effectiveGoal,
+            tenantId,
+            requestId,
+            dryRun: dryRun ?? false,
+            runTimeoutMs: getRunOnceTimeoutMs(),
+            maxMultiActSteps: getMaxMultiActSteps()
+          });
+        } finally {
+          lock.release();
+        }
+      } else {
+        runResult = await executeAgentRun(container, toolRunner, obsStore, {
+          observation: {
+            timestamp: observation.timestamp,
+            state: observation.state ?? {},
+            events: observation.events,
+            conversation_history: observation.conversation_history
+          },
+          goal: effectiveGoal,
+          tenantId,
+          requestId,
+          dryRun: dryRun ?? false,
+          runTimeoutMs: getRunOnceTimeoutMs(),
+          maxMultiActSteps: getMaxMultiActSteps()
+        });
+      }
     } catch (err) {
       if (err instanceof Error && err.message.includes('Goal conflict')) {
         reply.code(409).send({ error: err.message });

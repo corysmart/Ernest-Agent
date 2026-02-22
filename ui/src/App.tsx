@@ -43,16 +43,38 @@ interface DocEntry {
 
 type Tab = 'runs' | 'events' | 'docs';
 
+const estFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+  timeZoneName: 'short'
+});
+
+function formatTimestamp(timestamp: number, useEstTimezone: boolean): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  return useEstTimezone ? estFormatter.format(date) : date.toISOString();
+}
+
 function App() {
   const [tab, setTab] = useState<Tab>('runs');
   const [runs, setRuns] = useState<RunEntry[]>([]);
   const [activeRuns, setActiveRuns] = useState<ActiveRunEntry[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [events, setEvents] = useState<AuditEventEntry[]>([]);
+  const [eventRunFilter, setEventRunFilter] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocEntry[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [docContent, setDocContent] = useState<string>('');
   const [eventsConnected, setEventsConnected] = useState(false);
+  const [useEstTimezone, setUseEstTimezone] = useState(false);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -139,6 +161,17 @@ function App() {
   }, [selectedDoc, fetchDocContent]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API}/ui/config`);
+        if (!res.ok) return;
+        const data = await res.json() as { useEstTimezone?: boolean };
+        setUseEstTimezone(data.useEstTimezone === true);
+      } catch {
+        /* ignore */
+      }
+    })();
+
     fetchActiveRuns();
     const ev = new EventSource(`${API}/ui/events`);
     ev.onopen = () => {
@@ -194,6 +227,7 @@ function App() {
   const sanitizedHtml = selectedDoc && docContent
     ? DOMPurify.sanitize(marked.parse(docContent) as string)
     : '';
+  const visibleEvents = eventRunFilter ? events.filter((e) => e.requestId === eventRunFilter) : events;
 
   return (
     <div className="app">
@@ -214,9 +248,18 @@ function App() {
                 <span className="spinner" aria-hidden />
                 <strong>{activeRuns.length} run{activeRuns.length > 1 ? 's' : ''} in progress:</strong>
                 {activeRuns.map((a) => (
-                  <span key={a.requestId} className="active-run-state">
+                  <button
+                    key={a.requestId}
+                    type="button"
+                    className="active-run-link"
+                    onClick={() => {
+                      setEventRunFilter(a.requestId);
+                      setTab('events');
+                    }}
+                    title="Open this run in Audit Events"
+                  >
                     {a.requestId} → {a.stateTrace?.length ? a.stateTrace.join(' → ') : a.currentState}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}
@@ -243,7 +286,7 @@ function App() {
                       <td>{expandedRunId === r.requestId ? '▼' : '▶'}</td>
                       <td>{r.requestId}</td>
                       <td>{r.tenantId ?? '-'}</td>
-                      <td>{new Date(r.timestamp).toISOString()}</td>
+                      <td>{formatTimestamp(r.timestamp, useEstTimezone)}</td>
                       <td>{r.status}</td>
                       <td>{r.selectedGoalId ?? '-'}</td>
                       <td>{r.durationMs != null ? `${r.durationMs}ms` : '-'}</td>
@@ -282,10 +325,20 @@ function App() {
         {tab === 'events' && (
           <div className="panel">
             {eventsConnected ? <span className="badge">SSE connected</span> : <span className="badge off">SSE disconnected</span>}
+            <div className="event-controls">
+              {eventRunFilter ? (
+                <>
+                  <span className="event-filter-chip">Filtering run: {eventRunFilter}</span>
+                  <button type="button" className="refresh-btn" onClick={() => setEventRunFilter(null)}>Clear filter</button>
+                </>
+              ) : (
+                <span className="event-filter-chip muted">Showing all runs</span>
+              )}
+            </div>
             <ul className="events-list">
-              {events.map((e, i) => (
+              {visibleEvents.map((e, i) => (
                 <li key={`${e.timestamp}-${i}`}>
-                  <span className="event-time">{new Date(e.timestamp).toISOString()}</span>
+                  <span className="event-time">{formatTimestamp(e.timestamp, useEstTimezone)}</span>
                   <span className="event-type">{e.eventType}</span>
                   <pre>{JSON.stringify(e.data, null, 2)}</pre>
                 </li>

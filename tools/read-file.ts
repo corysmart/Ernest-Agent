@@ -10,6 +10,7 @@ import { resolve } from 'path';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { getFileWorkspaceRoot } from './file-workspace';
+import { getHeartbeatPathError } from './heartbeat-path-guard';
 
 const MAX_FILE_BYTES = Number(process.env.READ_FILE_MAX_BYTES) || 524288; // 512KB
 
@@ -28,6 +29,10 @@ export const readFile: ToolHandler = async (
     assertSafePath(workspaceRoot, pathArg.trim());
   } catch {
     return { success: false, error: 'Path traversal or invalid path' };
+  }
+  const heartbeatPathError = getHeartbeatPathError(targetPath);
+  if (heartbeatPathError) {
+    return { success: false, error: heartbeatPathError };
   }
 
   if (!existsSync(targetPath)) {

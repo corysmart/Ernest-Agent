@@ -10,6 +10,7 @@ import { resolve, dirname } from 'path';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { getFileWorkspaceRoot } from './file-workspace';
+import { getHeartbeatPathError } from './heartbeat-path-guard';
 
 export const writeFile: ToolHandler = async (
   input: Record<string, unknown>
@@ -33,6 +34,10 @@ export const writeFile: ToolHandler = async (
   }
 
   const targetPath = resolve(workspaceRoot, pathArg.trim());
+  const heartbeatPathError = getHeartbeatPathError(targetPath);
+  if (heartbeatPathError) {
+    return { success: false, error: heartbeatPathError };
+  }
 
   try {
     const dir = dirname(targetPath);

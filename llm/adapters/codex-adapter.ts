@@ -5,6 +5,9 @@
  * Prerequisite: npm install -g @openai/codex or brew install codex
  *
  * Prompts are passed via stdin (temp file as fd) to avoid argv exposure in process listings.
+ *
+ * Optional: CODEX_MODEL — Override the model (e.g. gpt-5.2, gpt-5-codex).
+ * See https://developers.openai.com/codex/models for available models.
  */
 
 import { spawn } from 'child_process';
@@ -12,6 +15,8 @@ import { mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { killOnAbort, KILL_GRACE_MS } from '../../tools/cli-kill';
+import { buildCodexExecArgs } from '../../tools/codex-cli-options';
+import { resolveDefaultCodexCwd } from '../../tools/codex-cwd';
 import {
   countApproxTokens,
   DEFAULT_MAX_TOKENS,
@@ -39,11 +44,11 @@ function simpleEmbedding(text: string, size: number): number[] {
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000; // 5 min, matches runTimeoutMs
 
 export class CodexLLMAdapter implements LLMAdapter {
-  private readonly cwd: string;
+  private readonly cwd?: string;
   private readonly timeoutMs: number;
 
   constructor(options?: { cwd?: string; timeoutMs?: number }) {
-    this.cwd = options?.cwd ?? process.cwd();
+    this.cwd = options?.cwd;
     const envMs = process.env.CODEX_TIMEOUT_MS ? parseInt(process.env.CODEX_TIMEOUT_MS, 10) : NaN;
     this.timeoutMs = options?.timeoutMs ?? (!Number.isNaN(envMs) && envMs > 0 ? envMs : DEFAULT_CODEX_TIMEOUT_MS);
   }
@@ -57,7 +62,8 @@ export class CodexLLMAdapter implements LLMAdapter {
       .map((m) => (m.role === 'system' ? `[System]\n${m.content}` : `[User]\n${m.content}`))
       .join('\n\n');
 
-    const result = await this.runCodex(prompt);
+    const cwd = this.cwd ?? resolveDefaultCodexCwd(prompt);
+    const result = await this.runCodex(prompt, cwd);
     if (!result.success) {
       throw new Error(result.error ?? `Codex failed: ${result.stderr || result.stdout}`);
     }
@@ -79,7 +85,7 @@ export class CodexLLMAdapter implements LLMAdapter {
     return 0;
   }
 
-  private runCodex(prompt: string): Promise<{
+  private runCodex(prompt: string, cwd: string): Promise<{
     success: boolean;
     stdout?: string;
     stderr?: string;
@@ -106,12 +112,14 @@ export class CodexLLMAdapter implements LLMAdapter {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    const args = buildCodexExecArgs();
+
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
 
-      const proc = spawn('codex', ['exec'], {
-        cwd: this.cwd,
+      const proc = spawn('codex', args, {
+        cwd,
         shell: false,
         stdio: [fd, 'pipe', 'pipe'],
         signal: controller.signal,
