@@ -25,6 +25,7 @@ import type { SandboxedToolRunner } from '../security/sandboxed-tool-runner';
 import type { Container } from '../core/di/container';
 import type { ObservabilityStore } from './observability-store';
 import { createObservabilityAuditLogger } from './observability-audit-forwarder';
+import { normalizeRunError } from './run-error-normalizer';
 import { getFileWorkspaceRoot, isRiskyWorkspaceModeEnabled } from '../tools/file-workspace';
 import { resolve } from 'path';
 
@@ -173,13 +174,21 @@ export async function executeAgentRun(
     const observationKeys = observation.state && typeof observation.state === 'object'
       ? Object.keys(observation.state)
       : [];
+    let error = result.error;
+    let errorKind: 'usage_limit' | undefined;
+    if (result.status === 'error' && result.error) {
+      const normalized = normalizeRunError(result.error);
+      error = normalized.displayError;
+      errorKind = normalized.errorKind;
+    }
     obsStore.addRun({
       requestId,
       tenantId,
       timestamp: Date.now(),
       status: result.status,
       selectedGoalId: result.selectedGoalId,
-      error: result.error,
+      error,
+      errorKind,
       decision: result.decision,
       actionResult: result.actionResult,
       stateTrace: result.stateTrace,

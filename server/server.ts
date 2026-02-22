@@ -11,6 +11,7 @@ import { getFileWorkspaceRoot } from '../tools/file-workspace';
 import { acquireWorkspaceRunLock, readWorkspaceRunLockOwner } from '../runtime/workspace-run-lock';
 import { validateErnestMailEnv } from '../tools/ernest-mail-client';
 import { syncHeartbeatArchiveFiles } from '../tools/heartbeat-archive';
+import { parseUsageLimitRetryAt } from './run-error-normalizer';
 
 const conversationEntrySchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -258,17 +259,26 @@ export async function buildServer(options?: { logger?: boolean }) {
   const containerContext = await buildContainer();
   const { container, rateLimiter, toolRunner } = containerContext;
   
-  let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let heartbeatArchiveIntervalId: ReturnType<typeof setInterval> | null = null;
   let heartbeatRunning = false;
   let heartbeatConsecutiveRefires = 0;
 
   const heartbeatEnabled = process.env.HEARTBEAT_ENABLED === 'true' || process.env.HEARTBEAT_ENABLED === '1';
 
+  function scheduleNextHeartbeat(delayMs: number): void {
+    if (heartbeatTimeoutId) clearTimeout(heartbeatTimeoutId);
+    heartbeatTimeoutId = setTimeout(() => {
+      heartbeatTimeoutId = null;
+      void runHeartbeatTick();
+    }, Math.max(0, delayMs));
+  }
+
   async function runHeartbeatTick(): Promise<void> {
     if (heartbeatRunning) return;
     heartbeatRunning = true;
     let willRefire = false;
+    let usageLimitRetryAt: Date | null = null;
     const requestId = `heartbeat-${Date.now()}`;
     const goal = {
       id: requestId,
@@ -278,6 +288,7 @@ export async function buildServer(options?: { logger?: boolean }) {
     };
     try {
       const workspaceRoot = getFileWorkspaceRoot();
+      let runResult: Awaited<ReturnType<typeof executeAgentRun>> | undefined;
       if (getRunLockEnabled()) {
         const lock = await acquireWorkspaceRunLock({
           workspaceRoot,
@@ -291,10 +302,11 @@ export async function buildServer(options?: { logger?: boolean }) {
             { owner: owner ?? 'unknown' },
             'Heartbeat skipped: workspace run lock is held by another run'
           );
+          if (heartbeatEnabled) scheduleNextHeartbeat(getHeartbeatIntervalMs());
           return;
         }
         try {
-          await executeAgentRun(container, toolRunner, obsStore, {
+          runResult = await executeAgentRun(container, toolRunner, obsStore, {
             observation: { timestamp: Date.now(), state: {} },
             goal,
             tenantId: undefined,
@@ -307,7 +319,7 @@ export async function buildServer(options?: { logger?: boolean }) {
           lock.release();
         }
       } else {
-        await executeAgentRun(container, toolRunner, obsStore, {
+        runResult = await executeAgentRun(container, toolRunner, obsStore, {
           observation: { timestamp: Date.now(), state: {} },
           goal,
           tenantId: undefined,
@@ -316,6 +328,15 @@ export async function buildServer(options?: { logger?: boolean }) {
           runTimeoutMs: getRunOnceTimeoutMs(),
           maxMultiActSteps: getMaxMultiActSteps()
         });
+      }
+      if (runResult?.result.status === 'error' && runResult.result.error) {
+        usageLimitRetryAt = parseUsageLimitRetryAt(runResult.result.error);
+        if (usageLimitRetryAt) {
+          fastify.log?.info?.(
+            { retryAt: usageLimitRetryAt.toISOString() },
+            'Heartbeat usage limit reached; scheduling resume at retry time'
+          );
+        }
       }
       let pending = hasPendingHeartbeatTasks();
       if (!pending && heartbeatResetRecurringEnabled) {
@@ -326,6 +347,7 @@ export async function buildServer(options?: { logger?: boolean }) {
         }
       }
       if (
+        !usageLimitRetryAt &&
         heartbeatRefireEnabled &&
         heartbeatConsecutiveRefires < heartbeatMaxConsecutiveRefires &&
         pending
@@ -338,9 +360,17 @@ export async function buildServer(options?: { logger?: boolean }) {
       fastify.log?.error?.({ err }, 'Heartbeat run failed');
     } finally {
       heartbeatRunning = false;
-      if (!willRefire) heartbeatConsecutiveRefires = 0;
+      if (!willRefire && !usageLimitRetryAt) heartbeatConsecutiveRefires = 0;
     }
-    if (willRefire) setImmediate(() => runHeartbeatTick());
+    const intervalMs = getHeartbeatIntervalMs();
+    if (usageLimitRetryAt) {
+      const delayMs = usageLimitRetryAt.getTime() - Date.now();
+      scheduleNextHeartbeat(delayMs);
+    } else if (willRefire) {
+      setImmediate(() => runHeartbeatTick());
+    } else if (heartbeatEnabled) {
+      scheduleNextHeartbeat(intervalMs);
+    }
   }
 
   async function runHeartbeatArchiveSyncTick(): Promise<void> {
@@ -384,7 +414,6 @@ export async function buildServer(options?: { logger?: boolean }) {
       setImmediate(() => {
         void runHeartbeatTick();
       });
-      heartbeatIntervalId = setInterval(() => runHeartbeatTick(), intervalMs);
       fastify.log?.info?.({ intervalMs }, 'Heartbeat trigger started');
     });
   }
@@ -404,9 +433,9 @@ export async function buildServer(options?: { logger?: boolean }) {
 
   // Register cleanup on server close
   fastify.addHook('onClose', async () => {
-    if (heartbeatIntervalId) {
-      clearInterval(heartbeatIntervalId);
-      heartbeatIntervalId = null;
+    if (heartbeatTimeoutId) {
+      clearTimeout(heartbeatTimeoutId);
+      heartbeatTimeoutId = null;
     }
     if (heartbeatArchiveIntervalId) {
       clearInterval(heartbeatArchiveIntervalId);

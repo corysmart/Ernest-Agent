@@ -17,6 +17,8 @@ export interface RunEntry {
   tenantId?: string;
   timestamp: number;
   status: 'completed' | 'idle' | 'dry_run' | 'error';
+  /** Distinguishes error types for UI (e.g. usage_limit vs generic error). */
+  errorKind?: 'usage_limit';
   selectedGoalId?: string;
   error?: string;
   decision?: { actionType: string; actionPayload?: Record<string, unknown>; confidence?: number; reasoning?: string };

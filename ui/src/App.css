@@ -232,6 +232,15 @@
   color: #f66;
 }
 
+.status-usage-limit {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  background: #3a3510;
+  color: #db9;
+  border-radius: 2px;
+}
+
 .docs-panel {
   display: flex;
   gap: 1rem;

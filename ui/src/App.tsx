@@ -10,6 +10,7 @@ interface RunEntry {
   tenantId?: string;
   timestamp: number;
   status: string;
+  errorKind?: 'usage_limit';
   selectedGoalId?: string;
   error?: string;
   decision?: { actionType: string; actionPayload?: Record<string, unknown>; confidence?: number; reasoning?: string };
@@ -287,7 +288,13 @@ function App() {
                       <td>{r.requestId}</td>
                       <td>{r.tenantId ?? '-'}</td>
                       <td>{formatTimestamp(r.timestamp, useEstTimezone)}</td>
-                      <td>{r.status}</td>
+                      <td>
+                        {r.errorKind === 'usage_limit' ? (
+                          <span className="status-usage-limit">Usage limit</span>
+                        ) : (
+                          r.status
+                        )}
+                      </td>
                       <td>{r.selectedGoalId ?? '-'}</td>
                       <td>{r.durationMs != null ? `${r.durationMs}ms` : '-'}</td>
                     </tr>
