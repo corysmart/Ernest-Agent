@@ -289,11 +289,10 @@ function App() {
                       <td>{r.tenantId ?? '-'}</td>
                       <td>{formatTimestamp(r.timestamp, useEstTimezone)}</td>
                       <td>
-                        {r.errorKind === 'usage_limit' ? (
-                          <span className="status-usage-limit">Usage limit</span>
-                        ) : (
-                          r.status
-                        )}
+                        {r.errorKind === 'usage_limit' ||
+                        (r.status === 'error' && r.error?.toLowerCase().includes('usage limit'))
+                          ? 'Usage limit'
+                          : r.status}
                       </td>
                       <td>{r.selectedGoalId ?? '-'}</td>
                       <td>{r.durationMs != null ? `${r.durationMs}ms` : '-'}</td>
