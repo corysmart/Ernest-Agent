@@ -63,7 +63,9 @@ Server listens on port 3000 (or `PORT` if set). You should see: `Server listenin
 ```bash
 npm run dev:ui:risky
 ```
-This enables risky sibling workspace mode (`/Users/cory/Documents` root), observability UI, EST/ET timestamp mode in the UI, and heartbeat execution. With heartbeat enabled, one tick is triggered immediately on startup and then continues on `HEARTBEAT_INTERVAL_MS` (default 5 min).
+This profile now builds before startup, then enables risky sibling workspace mode (`/Users/cory/Documents` root), Codex writable sandbox mode, observability UI, EST/ET timestamp mode in the UI, and heartbeat execution. With heartbeat enabled, one tick is triggered immediately on startup and then continues on `HEARTBEAT_INTERVAL_MS` (default 5 min).
+
+In risky mode, Codex runs from the risky workspace root and automatically uses flags compatible with parent-directory execution (`--sandbox workspace-write`, `--skip-git-repo-check`), so it can update both sibling repos (for example `ernest-mail`) and canonical heartbeat files under `Ernest Agent/workspace`.
 
 ## 4. Send Requests
 

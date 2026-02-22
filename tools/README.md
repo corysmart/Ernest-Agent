@@ -11,6 +11,11 @@ Default mode is safe. To intentionally allow sibling project bootstrapping (e.g.
 - `RISKY_WORKSPACE_MODE=true` or `FILE_WORKSPACE_MODE=risky`
 - Optional `RISKY_WORKSPACE_ROOT=/path/to/repositories` (defaults to parent of safe root)
 
+Heartbeat safety guard:
+
+- HEARTBEAT updates must target the canonical file under `OPENCLAW_WORKSPACE_ROOT/HEARTBEAT.md`.
+- Nested paths like `<sibling-repo>/workspace/HEARTBEAT.md` are rejected by tool guards.
+
 ### read_file
 
 Read file contents from the workspace. Used to inspect HEARTBEAT.md, source files, etc.
@@ -126,6 +131,11 @@ Set `CODEX_CWD` to run Codex (and the LLM adapter) in a specific directory—e.g
 Optional Codex execution controls:
 
 - `CODEX_SANDBOX_MODE` – passed as `--sandbox <value>` (for example `workspace-write`).
+
+Risky mode Codex defaults:
+
+- In risky mode, Codex default cwd resolves to the risky workspace root so one run can operate across sibling repos.
+- In risky mode, Codex also appends `--skip-git-repo-check` for parent-directory execution.
 
 ```bash
 # Equivalent terminal command
