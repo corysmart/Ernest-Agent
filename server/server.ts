@@ -246,7 +246,7 @@ const heartbeatResetRecurringEnabled =
   process.env.HEARTBEAT_RESET_RECURRING !== 'false' && process.env.HEARTBEAT_RESET_RECURRING !== '0';
 const heartbeatMaxConsecutiveRefires = Math.min(
   20,
-  Math.max(1, Number(process.env.HEARTBEAT_MAX_CONSECUTIVE_REFIRES ?? 5) || 5)
+  Math.max(1, Number(process.env.HEARTBEAT_MAX_CONSECUTIVE_REFIRES ?? 2) || 2)
 );
 
 export async function buildServer(options?: { logger?: boolean }) {
