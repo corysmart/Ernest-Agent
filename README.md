@@ -99,7 +99,7 @@ Adapters implement a common `LLMAdapter` interface and fall into two categories:
 
 **API-based adapters** (OpenAI, Anthropic, Local): Use API keys and HTTP. Suitable for programmatic usage and server deployment.
 
-**CLI-based adapters** (Codex CLI, Claude Code CLI): Run locally installed CLI tools (`codex`, `claude`) and rely on the user's existing subscription login. No separate API key required. The agent invokes these via tools such as `invoke_codex` and `invoke_claude`. Prompts are passed via temp files or stdin; never via process argv (avoids prompt leakage in process listings). Temp files use `0o600` permissions. Use API adapters when you need strict isolation, controlled rate limits, or server-side deployment without local CLIs. See [tools/README.md](tools/README.md) for setup.
+**CLI-based adapters** (Codex CLI): Run locally installed CLI tools (`codex`) and rely on the user's existing subscription login. No separate API key required. The agent invokes this via `invoke_codex`. Prompts are passed via temp files or stdin; never via process argv (avoids prompt leakage in process listings). Temp files use `0o600` permissions. Claude Code harness integration was removed due to Anthropic policy restrictions on harness usage; use Anthropic API adapters instead. Use API adapters when you need strict isolation, controlled rate limits, or server-side deployment without local CLIs. See [tools/README.md](tools/README.md) for setup.
 
 ## Observability UI
 
@@ -190,7 +190,7 @@ See [QUICKSTART.md](QUICKSTART.md) for install, build, run, and curl commands.
 - Security layer (validation, sandboxing, gating, SSRF/path protections)
 - Fastify API for one-shot agent execution
 - **Runtime**: `AgentRuntime` with heartbeat, `emitEvent()`, budget guardrails, circuit breaker, kill switch; `ObservationAdapter` and `ObservationNormalizer` for text-only observations
-- **CLI tools**: `invoke_codex` and `invoke_claude` for running Codex and Claude Code from the terminal using your existing subscriptions ([tools/README.md](tools/README.md))
+- **CLI tools**: `invoke_codex` for running Codex from the terminal using your existing subscription ([tools/README.md](tools/README.md))
 - **Dry run**: `dryRun: 'with-llm'` or `'without-llm'` to preview decisions without executing tools or updating state
 - **Auto-respond**: When `AUTO_RESPOND=true` (env) or `autoRespond: true` (request body), the server injects a default "Respond to user" goal when a `user_message` exists and no explicit goal is provided. Disabled by default; the agent remains idle unless auto-respond is explicitly enabled.
 - **Observability UI**: Local dashboard at `/ui` when `OBS_UI_ENABLED=true` (default in dev). Tabs for Runs, Audit Events (SSE), and Docs/Markdown viewer. Uses `marked` and `dompurify` for safe markdown rendering. Binds to localhost by default when enabled.

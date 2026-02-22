@@ -60,7 +60,7 @@ Some files are intentionally excluded via `coveragePathIgnorePatterns` (entrypoi
 
 - Tests run without external services by default. PostgreSQL-backed tests use `pg-mem` for in-process storage.
 - DNS-related tests use mocks/stubs so CI does not require live DNS/network dependencies.
-- CLI tool tests mock `child_process.spawn` for `codex`/`claude`, so binaries do not need to be installed in CI.
+- CLI tool tests mock `child_process.spawn` for `codex`, so binaries do not need to be installed in CI.
 - E2E tests set `LLM_PROVIDER=mock`, set `MOCK_LLM_RESPONSE` explicitly, and listen on an ephemeral localhost port.
 
 ## Adding Tests for New Modules or Tools

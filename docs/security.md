@@ -53,7 +53,7 @@ Secrets (API keys, etc.) are supplied via environment variables. A vault abstrac
 
 ## CLI Adapter Caveats
 
-CLI-based adapters (Codex, Claude Code) run locally installed tools. They introduce additional risk compared to API adapters:
+CLI-based adapter (Codex) runs a locally installed tool. It introduces additional risk compared to API adapters:
 
 - **Risks**: The CLI binary is trusted by the host. A compromised or malicious CLI could exfiltrate data or persist state. Temp files and child processes can leak if not cleaned up.
 - **Mitigations**:
@@ -63,7 +63,7 @@ CLI-based adapters (Codex, Claude Code) run locally installed tools. They introd
   - Process group termination (Unix) kills forked children when the parent is killed.
   - Path validation for `cwd` and prompt file paths.
 
-CLI adapters are suitable for development and subscription-based usage. For production with strict isolation, prefer API adapters behind a controlled service boundary.
+Claude Code harness integration was removed due to Anthropic policy restrictions on harness usage. Use Anthropic via API adapters. For production with strict isolation, prefer API adapters behind a controlled service boundary.
 
 ### Observability UI
 

@@ -15,7 +15,6 @@
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { pursueGoal } from './pursue-goal';
 import { invokeCodex } from './invoke-codex';
-import { invokeClaude } from './invoke-claude';
 import { sendEmail } from './send-email';
 import { scheduleTask } from './schedule-task';
 import { getRecentRuns } from './get-recent-runs';
@@ -129,12 +128,6 @@ export function initializeToolRegistry(): void {
     name: 'invoke_codex',
     handler: invokeCodex,
     description: 'Run OpenAI Codex CLI with a prompt. Uses ChatGPT subscription.'
-  });
-
-  toolRegistry.register({
-    name: 'invoke_claude',
-    handler: invokeClaude,
-    description: 'Run Claude Code CLI with a prompt. Uses Pro/Max/Teams subscription.'
   });
 
   toolRegistry.register({

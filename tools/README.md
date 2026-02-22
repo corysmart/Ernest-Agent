@@ -83,9 +83,9 @@ Creates a new workspace directory under the resolved file workspace root. Useful
 
 Path segments may only contain letters, numbers, dot, dash, underscore—no spaces or suffixes like ` 2` or ` copy` (avoids duplicates from iCloud/agent re-runs). Use the exact canonical name; if the workspace exists, pass `allowExisting: true`.
 
-## CLI Tools (invoke_codex, invoke_claude)
+## CLI Tools (invoke_codex)
 
-These tools run Codex and Claude Code from the terminal, using your existing subscriptions instead of separate API keys.
+This tool runs Codex from the terminal, using your existing subscription instead of a separate API key.
 
 **Default inference:** When no `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set, the agent uses Codex as the default LLM (no API key required).
 
@@ -103,17 +103,9 @@ brew install codex
 
 Authenticate: run `codex` once and sign in with your ChatGPT account.
 
-### Claude Code CLI (Anthropic)
+### Claude Code policy note
 
-```bash
-# Homebrew (recommended on macOS)
-brew install claude-code
-
-# or npm
-npm install -g @anthropic-ai/claude-code
-```
-
-Authenticate: run `claude auth login` or set `ANTHROPIC_API_KEY`.
+Claude Code harness integration (`invoke_claude`) was removed due to Anthropic policy restrictions on harness usage. Use the Anthropic API adapter (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`) when you want Anthropic-backed inference.
 
 ## Usage
 
@@ -140,28 +132,6 @@ Risky mode Codex defaults:
 ```bash
 # Equivalent terminal command
 codex "Summarize this project."
-```
-
-**invoke_claude** – `actionPayload: { prompt: "Your instruction" }`
-
-```bash
-# Equivalent terminal command
-claude "Create a Python script that prints 'Hello, world!'"
-```
-
-### invoke_claude options
-
-| Input        | Type   | Description                                  |
-|-------------|--------|----------------------------------------------|
-| prompt      | string | Main instruction (required unless promptFile) |
-| promptFile  | string | Path to file with longer instructions        |
-| systemPrompt| string | System prompt, e.g. "You are a concise coding assistant." |
-| cwd         | string | Working directory (default: process.cwd())   |
-
-Example with system prompt:
-
-```bash
-claude --system-prompt "You are a concise coding assistant." "Review this pull request"
 ```
 
 ## Email and Scheduling Tools

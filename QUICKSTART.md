@@ -40,12 +40,7 @@ export ANTHROPIC_EMBEDDING_MODEL=...
 # Optional: export CODEX_MODEL=gpt-5.2  to override the model
 ```
 
-**Option D: Claude Code CLI**
-```bash
-# Install: brew install claude-code  # or npm install -g @anthropic-ai/claude-code
-# Run: claude auth login
-# The agent uses invoke_claude when given goals that call it
-```
+> Note: Claude Code harness integration was removed due to Anthropic policy restrictions on harness usage. Use the Anthropic API adapter (`ANTHROPIC_API_KEY`) instead of Claude Code CLI integration.
 
 See [tools/README.md](tools/README.md) for CLI setup. The server uses Codex when no API keys are set. CLI adapters use temp files (not argv) and are suitable for development; use API adapters for production with strict isolation.
 
@@ -242,4 +237,4 @@ curl -s -X POST http://localhost:3000/agent/run-once \
 - [docs/api.md](docs/api.md) – Full API reference (run-once, dryRun, auth)
 - [docs/architecture.md](docs/architecture.md) – How the agent loop works
 - [docs/security.md](docs/security.md) – Security model and controls
-- [tools/README.md](tools/README.md) – invoke_codex and invoke_claude setup
+- [tools/README.md](tools/README.md) – invoke_codex and tool setup

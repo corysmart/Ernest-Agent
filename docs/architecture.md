@@ -20,12 +20,12 @@ This separation enables:
 | `self` | Capability and reliability tracking, updated from execution outcomes |
 | `goals` | Goal stack, hierarchy, priorities; planner with simulation-based action selection |
 | `agents` | Multi-agent registry, message bus, role specialization, memory boundary controls |
-| `llm` | Model adapters implementing `LLMAdapter` (OpenAI, Anthropic, Local, Codex CLI, Claude Code CLI, Mock) |
+| `llm` | Model adapters implementing `LLMAdapter` (OpenAI, Anthropic, Local, Codex CLI, Mock) |
 | `env` | Environment interface for observation and action; mocks for testing |
 | `security` | Prompt injection filtering, output validation, permission gating, sandboxed tools, rate limits, SSRF/path protections, audit logging |
 | `server` | Fastify API, request orchestration, container wiring |
 | `runtime` | AgentRuntime with heartbeat, event queue, event triggers, per-tenant budgets (max runs/hour, tokens/day), circuit breaker with cooldown, kill switch; ObservationAdapter and ObservationNormalizer for text-only observations |
-| `tools` | Module-based tool registry; invoke_codex, invoke_claude for CLI-based inference; sandboxed execution in worker threads |
+| `tools` | Module-based tool registry; invoke_codex for CLI-based inference; sandboxed execution in worker threads |
 
 ## Control Loop
 
