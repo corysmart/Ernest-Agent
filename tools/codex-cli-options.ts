@@ -12,6 +12,10 @@ export function buildCodexExecArgs(): string[] {
     args.push('--sandbox', sandboxMode);
   }
 
+  if (riskyMode) {
+    args.push('--skip-git-repo-check');
+  }
+
   return args;
 }
 

@@ -176,13 +176,12 @@ describe('invoke_codex', () => {
     expect(mockedSpawn).not.toHaveBeenCalled();
   });
 
-  it('uses heartbeat build target as default cwd when CODEX_CWD is unset', async () => {
+  it('uses risky workspace root as default cwd when risky mode is enabled', async () => {
     const baseDir = mkdtempSync(join(tmpdir(), 'invoke-codex-heartbeat-'));
     cleanupDirs.push(baseDir);
     const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
-    const targetRoot = join(baseDir, 'ernest-mail');
     mkdirSync(workspaceRoot, { recursive: true });
-    mkdirSync(targetRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
     writeFileSync(
       join(workspaceRoot, 'HEARTBEAT.md'),
       '# HEARTBEAT: Build `ernest-mail`\n',
@@ -215,18 +214,17 @@ describe('invoke_codex', () => {
     expect(result.success).toBe(true);
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--sandbox', 'workspace-write'],
-      expect.objectContaining({ cwd: targetRoot })
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
     );
   });
 
-  it('uses prompt-derived workspace target when heartbeat target is unavailable', async () => {
+  it('uses risky workspace root instead of prompt-derived target in risky mode', async () => {
     const baseDir = mkdtempSync(join(tmpdir(), 'invoke-codex-prompt-'));
     cleanupDirs.push(baseDir);
     const workspaceRoot = join(baseDir, 'Ernest Agent', 'workspace');
-    const targetRoot = join(baseDir, 'ernest-mail');
     mkdirSync(workspaceRoot, { recursive: true });
-    mkdirSync(targetRoot, { recursive: true });
+    mkdirSync(join(baseDir, 'ernest-mail'), { recursive: true });
     writeFileSync(
       join(workspaceRoot, 'HEARTBEAT.md'),
       '# HEARTBEAT: Build `missing-repo`\n',
@@ -259,8 +257,8 @@ describe('invoke_codex', () => {
     expect(result.success).toBe(true);
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec', '--sandbox', 'workspace-write'],
-      expect.objectContaining({ cwd: targetRoot })
+      ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check'],
+      expect.objectContaining({ cwd: baseDir })
     );
   });
 

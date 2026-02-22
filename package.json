@@ -14,7 +14,7 @@
     "test:e2e": "jest --runInBand --testPathPattern=tests/e2e",
     "lint": "eslint . --ext .ts",
     "dev": "node dist/server/server.js",
-    "dev:ui:risky": "RISKY_WORKSPACE_MODE=true RISKY_WORKSPACE_ROOT=\"/Users/cory/Documents\" CODEX_SANDBOX_MODE=workspace-write OBS_UI_ENABLED=true OBS_UI_TIMEZONE_EST=true HEARTBEAT_ENABLED=true node dist/server/server.js",
+    "dev:ui:risky": "npm run build && RISKY_WORKSPACE_MODE=true RISKY_WORKSPACE_ROOT=\"/Users/cory/Documents\" CODEX_SANDBOX_MODE=workspace-write OBS_UI_ENABLED=true OBS_UI_TIMEZONE_EST=true HEARTBEAT_ENABLED=true node dist/server/server.js",
     "dev:mock": "LLM_PROVIDER=mock OBS_UI_ENABLED=true OBS_UI_SKIP_AUTH=true node dist/server/server.js",
     "request:run": "node scripts/run-request.cjs requests/run-once.json",
     "request:run-goal": "node scripts/run-request.cjs requests/run-once-goal.json",

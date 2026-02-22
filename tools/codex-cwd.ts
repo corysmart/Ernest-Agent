@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
-import { getFileWorkspaceRoot } from './file-workspace';
+import { getFileWorkspaceRoot, isRiskyWorkspaceModeEnabled } from './file-workspace';
 
 const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
 
@@ -141,6 +141,12 @@ export function resolveDefaultCodexCwd(promptHint?: string): string {
   const raw = process.env.CODEX_CWD;
   if (typeof raw === 'string' && raw.trim()) {
     return resolve(expandHomePath(raw.trim()));
+  }
+
+  // In risky mode, run Codex from the risky workspace root so workspace-write
+  // can operate across sibling repos (e.g. ernest-mail + Ernest Agent/workspace).
+  if (isRiskyWorkspaceModeEnabled()) {
+    return getFileWorkspaceRoot();
   }
 
   const heartbeatTarget = resolveTargetFromHeartbeat();
