@@ -15,6 +15,7 @@ Heartbeat safety guard:
 
 - HEARTBEAT updates must target the canonical file under `OPENCLAW_WORKSPACE_ROOT/HEARTBEAT.md`.
 - Nested paths like `<sibling-repo>/workspace/HEARTBEAT.md` are rejected by tool guards.
+- Writes to canonical `HEARTBEAT.md` auto-sync `HEARTBEAT_ARCHIVE.md` (completed tasks archived by project; active heartbeat compacted to pending tasks).
 
 ### read_file
 
@@ -66,6 +67,16 @@ Write content to a file. Used to update HEARTBEAT.md or task state.
 **Returns:** `{ success, error? }`
 
 Creates parent directories if needed.
+
+### sync_heartbeat_archive
+
+Rebuilds `HEARTBEAT_ARCHIVE.md` from completed checklist items and compacts `HEARTBEAT.md` to pending tasks only.
+
+| Input | Type | Description |
+|------|------|-------------|
+| (none) | - | No input required |
+
+**Returns:** `{ success, updatedHeartbeat, updatedArchive, skipped?, reason?, error? }`
 
 ### create_workspace
 
@@ -142,6 +153,11 @@ Creates a disposable test email account via Ethereal. Saves credentials to `data
 
 **Example:** "Set up email for testing" – the agent can call this to create an account and configure sending.
 
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool creates a `local-dev` account via ernest-mail `POST /accounts` instead of creating an Ethereal account locally.
+- Requires `ERNEST_MAIL_API_KEY` when `ERNEST_MAIL_URL` is set.
+
 ### save_email_config
 
 Saves SMTP credentials to the config file so `send_email` works. Use when the user provides credentials (host, port, user, pass). Never writes to `.env`.
@@ -156,6 +172,11 @@ Saves SMTP credentials to the config file so `send_email` works. Use when the us
 
 **Example:** "Save my Gmail SMTP: host smtp.gmail.com, user me@gmail.com, pass xxxx" – the agent extracts and saves.
 
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool creates/updates an SMTP-backed account via ernest-mail `POST /accounts` instead of writing local `EMAIL_CONFIG_PATH`.
+- Requires `ERNEST_MAIL_API_KEY` when `ERNEST_MAIL_URL` is set.
+
 ### send_email
 
 Sends an email via SMTP. Uses credentials from env vars or the config file (populated by `create_test_email_account` or `save_email_config`).
@@ -168,6 +189,12 @@ Sends an email via SMTP. Uses credentials from env vars or the config file (popu
 | html    | string | HTML body (optional; use with or instead of body) |
 
 **Env config:** `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (defaults to SMTP_USER).
+
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool calls ernest-mail `POST /emails/send` instead of local SMTP/nodemailer.
+- When integration mode is enabled, `ERNEST_MAIL_API_KEY` is required and `accountId` must be provided in the tool input.
+- Optional `tenantId` is forwarded as `X-Tenant-Id`.
 
 **Example:** Tell the agent "Email me a summary at user@example.com" – it can call `send_email` with the summary.
 

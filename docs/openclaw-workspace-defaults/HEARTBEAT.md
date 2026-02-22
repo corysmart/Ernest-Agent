@@ -4,6 +4,10 @@ Run this check regularly (daily or per session) to keep the workspace healthy.
 
 Sections marked `<!-- recurring -->` are reset when all tasks are complete, so they run again on the next interval. One-time tasks stay checked.
 
+Archive convention:
+- Keep this file focused on active/pending checklist items.
+- Move completed one-time items and long run-note history into `HEARTBEAT_ARCHIVE.md` (grouped by project) to keep token usage low.
+
 ## Context Health <!-- recurring -->
 - [ ] I still understand the current goals and priorities
 - [ ] No critical context is missing

@@ -114,6 +114,15 @@ Single run-once requests can take up to 10 minutes for complex tasks. Set `RUN_O
 
 When `HEARTBEAT_ENABLED=true`, the server triggers one heartbeat run on startup and then continues periodically with a "Process heartbeat" goal. The observation includes the OpenClaw workspace (e.g. `HEARTBEAT.md`, `AGENTS.md`). Set `HEARTBEAT_INTERVAL_MS` (default `300000` = 5 min) to configure the interval. Overlapping runs are prevented. If `HEARTBEAT_REFIRE_ON_PENDING=true` (default), the server re-fires immediately when HEARTBEAT.md still has unchecked tasks, up to `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` (default 5). See `docs/autonomous-execution-plan.md` for details.
 
+**Heartbeat archive auto-sync**
+
+The server can auto-maintain `HEARTBEAT_ARCHIVE.md` (startup + daily by default):
+
+- `HEARTBEAT_ARCHIVE_AUTO_SYNC` – enable/disable archive sync (default enabled)
+- `HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS` – sync interval (default `86400000`, once daily)
+
+During sync, completed checklist items are archived by project and canonical `HEARTBEAT.md` is compacted to pending tasks.
+
 ### Observability UI (when OBS_UI_ENABLED)
 
 When `OBS_UI_ENABLED=true` (default in dev), the server serves a local observability dashboard. Binds to localhost by default (`OBS_UI_BIND_LOCALHOST`; set to `false` to bind to `0.0.0.0`).
@@ -148,9 +157,21 @@ When the agent uses `send_email` or `schedule_task`:
 
 Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
 
+Ernest Mail integration mode:
+
+- Set `ERNEST_MAIL_URL` to route `send_email` requests to ernest-mail `POST /emails/send`.
+- When `ERNEST_MAIL_URL` is set, `ERNEST_MAIL_API_KEY` must also be set.
+- In this mode, `send_email` expects `accountId` in tool input (ernest-mail requirement).
+
 **create_test_email_account** – Creates Ethereal test account and saves config. For testing only.
 
+With `ERNEST_MAIL_URL` configured, `create_test_email_account` instead creates a `local-dev` account via ernest-mail `POST /accounts`.
+
 **save_email_config** – Saves SMTP credentials to `EMAIL_CONFIG_PATH` (default: `data/email-config.json`). Agent can persist credentials when user provides them. Never writes to `.env`.
+
+With `ERNEST_MAIL_URL` configured, `save_email_config` instead writes SMTP account details to ernest-mail via `POST /accounts`.
+
+**sync_heartbeat_archive** – Deterministic maintenance tool that rebuilds `HEARTBEAT_ARCHIVE.md` from completed tasks and compacts `HEARTBEAT.md` to pending tasks only.
 
 **schedule_task** – Stores tasks to a file for a scheduler to consume:
 

@@ -62,6 +62,8 @@ This profile now builds before startup, then enables risky sibling workspace mod
 
 In risky mode, Codex runs from the risky workspace root and automatically uses flags compatible with parent-directory execution (`--sandbox workspace-write`, `--skip-git-repo-check`), so it can update both sibling repos (for example `ernest-mail`) and canonical heartbeat files under `Ernest Agent/workspace`.
 
+Heartbeat archive maintenance runs automatically by default (startup + daily): set `HEARTBEAT_ARCHIVE_AUTO_SYNC=false` to disable, or tune cadence with `HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS`.
+
 ## 4. Send Requests
 
 ### Terminal UI (recommended)

@@ -9,6 +9,7 @@
 
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { saveEmailConfig, type SmtpConfig } from './email-config';
+import { createErnestMailAccount, getErnestMailConfigFromEnv } from './ernest-mail-client';
 
 export const saveEmailConfigTool: ToolHandler = async (
   input: Record<string, unknown>
@@ -36,6 +37,38 @@ export const saveEmailConfigTool: ToolHandler = async (
     pass,
     from: typeof input.from === 'string' && input.from.trim() ? input.from.trim() : user.trim()
   };
+
+  const ernestMailConfig = getErnestMailConfigFromEnv();
+  if (ernestMailConfig.enabled) {
+    if (ernestMailConfig.error) {
+      return { success: false, error: ernestMailConfig.error };
+    }
+    const accountEmail =
+      typeof input.email === 'string' && input.email.trim()
+        ? input.email.trim()
+        : config.from ?? config.user;
+    const result = await createErnestMailAccount({
+      email: accountEmail,
+      provider: 'smtp',
+      smtp: {
+        host: config.host,
+        port: config.port,
+        user: config.user,
+        pass: config.pass,
+        from: config.from
+      }
+    });
+    if (result.success) {
+      return {
+        success: true,
+        message: 'SMTP account saved to ernest-mail.'
+      };
+    }
+    return {
+      success: false,
+      error: result.error ?? 'Failed to save SMTP account to ernest-mail'
+    };
+  }
 
   try {
     saveEmailConfig(config);

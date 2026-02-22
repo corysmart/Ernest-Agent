@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { sendEmail } from '../../tools/send-email';
+import * as ernestMailClient from '../../tools/ernest-mail-client';
 
 describe('send_email', () => {
   let tmpDir: string;
@@ -54,5 +55,41 @@ describe('send_email', () => {
     });
     expect(result.success).toBe(false);
     expect((result as { error?: string }).error).toContain('not configured');
+  });
+
+  it('requires accountId when ERNEST_MAIL_URL is configured', async () => {
+    process.env.ERNEST_MAIL_URL = 'http://127.0.0.1:3100';
+    process.env.ERNEST_MAIL_API_KEY = 'secret';
+    const result = await sendEmail({
+      to: 'a@b.com',
+      subject: 'Hi',
+      body: 'Hello'
+    });
+    expect(result.success).toBe(false);
+    expect((result as { error?: string }).error).toContain('accountId');
+  });
+
+  it('routes sends through ernest-mail when configured', async () => {
+    process.env.ERNEST_MAIL_URL = 'http://127.0.0.1:3100';
+    process.env.ERNEST_MAIL_API_KEY = 'secret';
+    const spy = jest
+      .spyOn(ernestMailClient, 'sendViaErnestMail')
+      .mockResolvedValue({ success: true, status: 202, data: { id: 'msg-1' } });
+
+    const result = await sendEmail({
+      accountId: 'acct-1',
+      to: 'a@b.com',
+      subject: 'Hi',
+      body: 'Hello',
+      tenantId: 'tenant-1'
+    });
+
+    expect(result.success).toBe(true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'acct-1',
+        tenantId: 'tenant-1'
+      })
+    );
   });
 });

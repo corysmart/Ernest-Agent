@@ -25,6 +25,7 @@ import { listDir } from './list-dir';
 import { runCommand } from './run-command';
 import { writeFile } from './write-file';
 import { createWorkspace } from './create-workspace';
+import { syncHeartbeatArchive } from './sync-heartbeat-archive';
 
 export interface ToolDefinition {
   name: string;
@@ -184,6 +185,12 @@ export function initializeToolRegistry(): void {
     name: 'create_workspace',
     handler: createWorkspace,
     description: 'Create a new workspace directory within file workspace root. Supports risky mode for sibling project bootstrapping.'
+  });
+
+  toolRegistry.register({
+    name: 'sync_heartbeat_archive',
+    handler: syncHeartbeatArchive,
+    description: 'Rebuild HEARTBEAT_ARCHIVE.md from completed tasks and compact HEARTBEAT.md to pending items.'
   });
 
   // Add more tools here as they are created

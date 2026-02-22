@@ -9,6 +9,8 @@ import { ObservabilityStore } from './observability-store';
 import { registerObservabilityRoutes } from './observability-routes';
 import { getFileWorkspaceRoot } from '../tools/file-workspace';
 import { acquireWorkspaceRunLock, readWorkspaceRunLockOwner } from '../runtime/workspace-run-lock';
+import { validateErnestMailEnv } from '../tools/ernest-mail-client';
+import { syncHeartbeatArchiveFiles } from '../tools/heartbeat-archive';
 
 const conversationEntrySchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -22,6 +24,14 @@ const observationSchema = z.object({
   /** Multi-turn context. Pass prior exchange for follow-ups (e.g. Codex asked a clarifying question). */
   conversation_history: z.array(conversationEntrySchema).optional()
 });
+
+// P2: Validate ernest-mail env configuration early to avoid silent misconfiguration
+const ernestMailEnv = validateErnestMailEnv();
+if (ernestMailEnv.enabled && !ernestMailEnv.valid) {
+  console.warn(
+    `[WARN] ERNEST_MAIL configuration is invalid: ${ernestMailEnv.errors.join('; ')}`
+  );
+}
 
 const goalSchema = z.object({
   id: z.string().min(1),
@@ -121,6 +131,7 @@ function getMaxMultiActSteps(): number {
 }
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 300_000; // 5 min
+const DEFAULT_HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // once daily
 const DEFAULT_RUN_LOCK_WAIT_MS = 5000;
 const DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS = 500;
 const DEFAULT_RUN_LOCK_STALE_MS = 15 * 60 * 1000;
@@ -129,6 +140,24 @@ function getHeartbeatIntervalMs(): number {
   const raw = Number(process.env.HEARTBEAT_INTERVAL_MS ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
   if (!Number.isFinite(raw) || raw < 1) {
     return DEFAULT_HEARTBEAT_INTERVAL_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getHeartbeatArchiveSyncEnabled(): boolean {
+  return (
+    process.env.HEARTBEAT_ARCHIVE_AUTO_SYNC !== 'false'
+    && process.env.HEARTBEAT_ARCHIVE_AUTO_SYNC !== '0'
+  );
+}
+
+function getHeartbeatArchiveSyncIntervalMs(): number {
+  const raw = Number(
+    process.env.HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS
+    ?? DEFAULT_HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS
+  );
+  if (!Number.isFinite(raw) || raw < 1000) {
+    return DEFAULT_HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS;
   }
   return Math.floor(raw);
 }
@@ -230,6 +259,7 @@ export async function buildServer(options?: { logger?: boolean }) {
   const { container, rateLimiter, toolRunner } = containerContext;
   
   let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+  let heartbeatArchiveIntervalId: ReturnType<typeof setInterval> | null = null;
   let heartbeatRunning = false;
   let heartbeatConsecutiveRefires = 0;
 
@@ -313,6 +343,40 @@ export async function buildServer(options?: { logger?: boolean }) {
     if (willRefire) setImmediate(() => runHeartbeatTick());
   }
 
+  async function runHeartbeatArchiveSyncTick(): Promise<void> {
+    try {
+      if (getRunLockEnabled()) {
+        const workspaceRoot = getFileWorkspaceRoot();
+        const requestId = `archive-sync-${Date.now()}`;
+        const lock = await acquireWorkspaceRunLock({
+          workspaceRoot,
+          owner: requestId,
+          waitMs: 0,
+          staleMs: getRunLockStaleMs()
+        });
+        if (!lock) {
+          return;
+        }
+        try {
+          const result = syncHeartbeatArchiveFiles();
+          if (!result.success) {
+            fastify.log?.warn?.({ error: result.error }, 'Heartbeat archive sync failed');
+          }
+        } finally {
+          lock.release();
+        }
+        return;
+      }
+
+      const result = syncHeartbeatArchiveFiles();
+      if (!result.success) {
+        fastify.log?.warn?.({ error: result.error }, 'Heartbeat archive sync failed');
+      }
+    } catch (error) {
+      fastify.log?.warn?.({ err: error }, 'Heartbeat archive sync failed');
+    }
+  }
+
   if (heartbeatEnabled) {
     fastify.addHook('onReady', async () => {
       const intervalMs = getHeartbeatIntervalMs();
@@ -325,11 +389,28 @@ export async function buildServer(options?: { logger?: boolean }) {
     });
   }
 
+  if (getHeartbeatArchiveSyncEnabled()) {
+    fastify.addHook('onReady', async () => {
+      const intervalMs = getHeartbeatArchiveSyncIntervalMs();
+      setImmediate(() => {
+        void runHeartbeatArchiveSyncTick();
+      });
+      heartbeatArchiveIntervalId = setInterval(() => {
+        void runHeartbeatArchiveSyncTick();
+      }, intervalMs);
+      fastify.log?.info?.({ intervalMs }, 'Heartbeat archive auto-sync started');
+    });
+  }
+
   // Register cleanup on server close
   fastify.addHook('onClose', async () => {
     if (heartbeatIntervalId) {
       clearInterval(heartbeatIntervalId);
       heartbeatIntervalId = null;
+    }
+    if (heartbeatArchiveIntervalId) {
+      clearInterval(heartbeatArchiveIntervalId);
+      heartbeatArchiveIntervalId = null;
     }
     await containerContext.cleanup();
   });

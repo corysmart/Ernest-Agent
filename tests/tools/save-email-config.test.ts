@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { saveEmailConfigTool } from '../../tools/save-email-config';
+import * as ernestMailClient from '../../tools/ernest-mail-client';
 
 describe('save_email_config', () => {
   let tmpDir: string;
@@ -53,5 +54,28 @@ describe('save_email_config', () => {
     expect(config.pass).toBe('app-password');
     expect(config.port).toBe(587);
     expect(config.from).toBe('me@gmail.com');
+  });
+
+  it('routes smtp account creation to ernest-mail when configured', async () => {
+    process.env.ERNEST_MAIL_URL = 'http://127.0.0.1:3100';
+    process.env.ERNEST_MAIL_API_KEY = 'secret';
+    const spy = jest
+      .spyOn(ernestMailClient, 'createErnestMailAccount')
+      .mockResolvedValue({ success: true, status: 201, data: { id: 'acct-1' } });
+
+    const result = await saveEmailConfigTool({
+      host: 'smtp.gmail.com',
+      user: 'me@gmail.com',
+      pass: 'app-password',
+      port: 587
+    });
+
+    expect(result.success).toBe(true);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'smtp',
+        email: 'me@gmail.com'
+      })
+    );
   });
 });
