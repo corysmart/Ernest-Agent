@@ -15,6 +15,7 @@ import { mkdtempSync, writeFileSync, openSync, closeSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { killOnAbort, KILL_GRACE_MS } from '../../tools/cli-kill';
+import { buildCodexExecArgs } from '../../tools/codex-cli-options';
 import { resolveDefaultCodexCwd } from '../../tools/codex-cwd';
 import {
   countApproxTokens,
@@ -111,8 +112,7 @@ export class CodexLLMAdapter implements LLMAdapter {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    const modelOverride = process.env.CODEX_MODEL?.trim();
-    const args = ['exec', ...(modelOverride ? ['--model', modelOverride] : [])];
+    const args = buildCodexExecArgs();
 
     return new Promise((resolve) => {
       let stdout = '';

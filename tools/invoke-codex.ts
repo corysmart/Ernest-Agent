@@ -17,6 +17,7 @@ import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { killOnAbort, KILL_GRACE_MS } from './cli-kill';
 import { resolveDefaultCodexCwd } from './codex-cwd';
+import { buildCodexExecArgs } from './codex-cli-options';
 
 export const invokeCodex: ToolHandler = async (
   input: Record<string, unknown>
@@ -59,8 +60,7 @@ export const invokeCodex: ToolHandler = async (
     let stdout = '';
     let stderr = '';
 
-    const modelOverride = process.env.CODEX_MODEL?.trim();
-    const args = ['exec', ...(modelOverride ? ['--model', modelOverride] : [])];
+    const args = buildCodexExecArgs();
     const proc = spawn('codex', args, {
       cwd,
       shell: false,

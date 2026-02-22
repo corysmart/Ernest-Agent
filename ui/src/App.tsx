@@ -69,6 +69,7 @@ function App() {
   const [activeRuns, setActiveRuns] = useState<ActiveRunEntry[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [events, setEvents] = useState<AuditEventEntry[]>([]);
+  const [eventRunFilter, setEventRunFilter] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocEntry[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [docContent, setDocContent] = useState<string>('');
@@ -226,6 +227,7 @@ function App() {
   const sanitizedHtml = selectedDoc && docContent
     ? DOMPurify.sanitize(marked.parse(docContent) as string)
     : '';
+  const visibleEvents = eventRunFilter ? events.filter((e) => e.requestId === eventRunFilter) : events;
 
   return (
     <div className="app">
@@ -246,9 +248,18 @@ function App() {
                 <span className="spinner" aria-hidden />
                 <strong>{activeRuns.length} run{activeRuns.length > 1 ? 's' : ''} in progress:</strong>
                 {activeRuns.map((a) => (
-                  <span key={a.requestId} className="active-run-state">
+                  <button
+                    key={a.requestId}
+                    type="button"
+                    className="active-run-link"
+                    onClick={() => {
+                      setEventRunFilter(a.requestId);
+                      setTab('events');
+                    }}
+                    title="Open this run in Audit Events"
+                  >
                     {a.requestId} → {a.stateTrace?.length ? a.stateTrace.join(' → ') : a.currentState}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}
@@ -314,8 +325,18 @@ function App() {
         {tab === 'events' && (
           <div className="panel">
             {eventsConnected ? <span className="badge">SSE connected</span> : <span className="badge off">SSE disconnected</span>}
+            <div className="event-controls">
+              {eventRunFilter ? (
+                <>
+                  <span className="event-filter-chip">Filtering run: {eventRunFilter}</span>
+                  <button type="button" className="refresh-btn" onClick={() => setEventRunFilter(null)}>Clear filter</button>
+                </>
+              ) : (
+                <span className="event-filter-chip muted">Showing all runs</span>
+              )}
+            </div>
             <ul className="events-list">
-              {events.map((e, i) => (
+              {visibleEvents.map((e, i) => (
                 <li key={`${e.timestamp}-${i}`}>
                   <span className="event-time">{formatTimestamp(e.timestamp, useEstTimezone)}</span>
                   <span className="event-type">{e.eventType}</span>

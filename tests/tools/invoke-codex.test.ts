@@ -12,6 +12,7 @@ const ORIGINAL_OPENCLAW_WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE_ROOT;
 const ORIGINAL_FILE_WORKSPACE_ROOT = process.env.FILE_WORKSPACE_ROOT;
 const ORIGINAL_RISKY_WORKSPACE_MODE = process.env.RISKY_WORKSPACE_MODE;
 const ORIGINAL_RISKY_WORKSPACE_ROOT = process.env.RISKY_WORKSPACE_ROOT;
+const ORIGINAL_CODEX_SANDBOX_MODE = process.env.CODEX_SANDBOX_MODE;
 
 describe('invoke_codex', () => {
   const cleanupDirs: string[] = [];
@@ -23,6 +24,7 @@ describe('invoke_codex', () => {
     delete process.env.FILE_WORKSPACE_ROOT;
     delete process.env.RISKY_WORKSPACE_MODE;
     delete process.env.RISKY_WORKSPACE_ROOT;
+    delete process.env.CODEX_SANDBOX_MODE;
   });
 
   afterEach(() => {
@@ -31,6 +33,7 @@ describe('invoke_codex', () => {
     process.env.FILE_WORKSPACE_ROOT = ORIGINAL_FILE_WORKSPACE_ROOT;
     process.env.RISKY_WORKSPACE_MODE = ORIGINAL_RISKY_WORKSPACE_MODE;
     process.env.RISKY_WORKSPACE_ROOT = ORIGINAL_RISKY_WORKSPACE_ROOT;
+    process.env.CODEX_SANDBOX_MODE = ORIGINAL_CODEX_SANDBOX_MODE;
     while (cleanupDirs.length > 0) {
       const dir = cleanupDirs.pop();
       if (!dir) continue;
@@ -212,7 +215,7 @@ describe('invoke_codex', () => {
     expect(result.success).toBe(true);
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec'],
+      ['exec', '--sandbox', 'workspace-write'],
       expect.objectContaining({ cwd: targetRoot })
     );
   });
@@ -256,7 +259,7 @@ describe('invoke_codex', () => {
     expect(result.success).toBe(true);
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec'],
+      ['exec', '--sandbox', 'workspace-write'],
       expect.objectContaining({ cwd: targetRoot })
     );
   });
@@ -287,5 +290,34 @@ describe('invoke_codex', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('ENOENT');
+  });
+
+  it('passes sandbox flag when configured', async () => {
+    process.env.CODEX_SANDBOX_MODE = 'workspace-write';
+
+    const mockChild: {
+      stdout: { on: jest.Mock };
+      stderr: { on: jest.Mock };
+      on: jest.Mock;
+    } = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn()
+    };
+    mockChild.on.mockImplementation((ev: string, fn: (...args: unknown[]) => void) => {
+      if (ev === 'close') setImmediate(() => fn(0, null));
+      return mockChild;
+    });
+    mockedSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
+    (mockChild.stdout as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+    (mockChild.stderr as { on: jest.Mock }).on.mockImplementation(() => mockChild);
+
+    const result = await invokeCodex({ prompt: 'Check flags' });
+    expect(result.success).toBe(true);
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write'],
+      expect.any(Object)
+    );
   });
 });

@@ -7,6 +7,8 @@ import { executeAgentRun } from './execute-agent-run';
 import { assertSafeObject } from '../security/validation';
 import { ObservabilityStore } from './observability-store';
 import { registerObservabilityRoutes } from './observability-routes';
+import { getFileWorkspaceRoot } from '../tools/file-workspace';
+import { acquireWorkspaceRunLock, readWorkspaceRunLockOwner } from '../runtime/workspace-run-lock';
 
 const conversationEntrySchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -119,11 +121,42 @@ function getMaxMultiActSteps(): number {
 }
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 300_000; // 5 min
+const DEFAULT_RUN_LOCK_WAIT_MS = 5000;
+const DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS = 500;
+const DEFAULT_RUN_LOCK_STALE_MS = 15 * 60 * 1000;
 
 function getHeartbeatIntervalMs(): number {
   const raw = Number(process.env.HEARTBEAT_INTERVAL_MS ?? DEFAULT_HEARTBEAT_INTERVAL_MS);
   if (!Number.isFinite(raw) || raw < 1) {
     return DEFAULT_HEARTBEAT_INTERVAL_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getRunLockEnabled(): boolean {
+  return process.env.RUN_LOCK_ENABLED !== 'false' && process.env.RUN_LOCK_ENABLED !== '0';
+}
+
+function getRunLockWaitMs(): number {
+  const raw = Number(process.env.RUN_LOCK_WAIT_MS ?? DEFAULT_RUN_LOCK_WAIT_MS);
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_RUN_LOCK_WAIT_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getHeartbeatRunLockWaitMs(): number {
+  const raw = Number(process.env.HEARTBEAT_RUN_LOCK_WAIT_MS ?? DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS);
+  if (!Number.isFinite(raw) || raw < 0) {
+    return DEFAULT_HEARTBEAT_RUN_LOCK_WAIT_MS;
+  }
+  return Math.floor(raw);
+}
+
+function getRunLockStaleMs(): number {
+  const raw = Number(process.env.RUN_LOCK_STALE_MS ?? DEFAULT_RUN_LOCK_STALE_MS);
+  if (!Number.isFinite(raw) || raw < 1000) {
+    return DEFAULT_RUN_LOCK_STALE_MS;
   }
   return Math.floor(raw);
 }
@@ -214,15 +247,46 @@ export async function buildServer(options?: { logger?: boolean }) {
       priority: 1
     };
     try {
-      await executeAgentRun(container, toolRunner, obsStore, {
-        observation: { timestamp: Date.now(), state: {} },
-        goal,
-        tenantId: undefined,
-        requestId,
-        dryRun: false,
-        runTimeoutMs: getRunOnceTimeoutMs(),
-        maxMultiActSteps: getMaxMultiActSteps()
-      });
+      const workspaceRoot = getFileWorkspaceRoot();
+      if (getRunLockEnabled()) {
+        const lock = await acquireWorkspaceRunLock({
+          workspaceRoot,
+          owner: `heartbeat:${requestId}`,
+          waitMs: getHeartbeatRunLockWaitMs(),
+          staleMs: getRunLockStaleMs()
+        });
+        if (!lock) {
+          const owner = readWorkspaceRunLockOwner(workspaceRoot);
+          fastify.log?.info?.(
+            { owner: owner ?? 'unknown' },
+            'Heartbeat skipped: workspace run lock is held by another run'
+          );
+          return;
+        }
+        try {
+          await executeAgentRun(container, toolRunner, obsStore, {
+            observation: { timestamp: Date.now(), state: {} },
+            goal,
+            tenantId: undefined,
+            requestId,
+            dryRun: false,
+            runTimeoutMs: getRunOnceTimeoutMs(),
+            maxMultiActSteps: getMaxMultiActSteps()
+          });
+        } finally {
+          lock.release();
+        }
+      } else {
+        await executeAgentRun(container, toolRunner, obsStore, {
+          observation: { timestamp: Date.now(), state: {} },
+          goal,
+          tenantId: undefined,
+          requestId,
+          dryRun: false,
+          runTimeoutMs: getRunOnceTimeoutMs(),
+          maxMultiActSteps: getMaxMultiActSteps()
+        });
+      }
       let pending = hasPendingHeartbeatTasks();
       if (!pending && heartbeatResetRecurringEnabled) {
         const reset = resetRecurringHeartbeatTasks();
@@ -351,20 +415,56 @@ export async function buildServer(options?: { logger?: boolean }) {
     
     let runResult;
     try {
-      runResult = await executeAgentRun(container, toolRunner, obsStore, {
-        observation: {
-          timestamp: observation.timestamp,
-          state: observation.state ?? {},
-          events: observation.events,
-          conversation_history: observation.conversation_history
-        },
-        goal: effectiveGoal,
-        tenantId,
-        requestId,
-        dryRun: dryRun ?? false,
-        runTimeoutMs: getRunOnceTimeoutMs(),
-        maxMultiActSteps: getMaxMultiActSteps()
-      });
+      if (getRunLockEnabled()) {
+        const workspaceRoot = getFileWorkspaceRoot();
+        const lock = await acquireWorkspaceRunLock({
+          workspaceRoot,
+          owner: `api:${requestId}`,
+          waitMs: getRunLockWaitMs(),
+          staleMs: getRunLockStaleMs()
+        });
+        if (!lock) {
+          const owner = readWorkspaceRunLockOwner(workspaceRoot);
+          reply.code(409).send({
+            error: 'Workspace is busy with another agent run',
+            owner: owner ?? 'unknown'
+          });
+          return;
+        }
+        try {
+          runResult = await executeAgentRun(container, toolRunner, obsStore, {
+            observation: {
+              timestamp: observation.timestamp,
+              state: observation.state ?? {},
+              events: observation.events,
+              conversation_history: observation.conversation_history
+            },
+            goal: effectiveGoal,
+            tenantId,
+            requestId,
+            dryRun: dryRun ?? false,
+            runTimeoutMs: getRunOnceTimeoutMs(),
+            maxMultiActSteps: getMaxMultiActSteps()
+          });
+        } finally {
+          lock.release();
+        }
+      } else {
+        runResult = await executeAgentRun(container, toolRunner, obsStore, {
+          observation: {
+            timestamp: observation.timestamp,
+            state: observation.state ?? {},
+            events: observation.events,
+            conversation_history: observation.conversation_history
+          },
+          goal: effectiveGoal,
+          tenantId,
+          requestId,
+          dryRun: dryRun ?? false,
+          runTimeoutMs: getRunOnceTimeoutMs(),
+          maxMultiActSteps: getMaxMultiActSteps()
+        });
+      }
     } catch (err) {
       if (err instanceof Error && err.message.includes('Goal conflict')) {
         reply.code(409).send({ error: err.message });

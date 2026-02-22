@@ -123,6 +123,10 @@ The agent can call these tools when given appropriate goals or when the LLM sele
 
 Set `CODEX_CWD` to run Codex (and the LLM adapter) in a specific directory—e.g. a clone with `dev` checked out. Supports `~` expansion.
 
+Optional Codex execution controls:
+
+- `CODEX_SANDBOX_MODE` – passed as `--sandbox <value>` (for example `workspace-write`).
+
 ```bash
 # Equivalent terminal command
 codex "Summarize this project."

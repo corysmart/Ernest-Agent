@@ -99,7 +99,7 @@ export async function executeAgentRun(
     ...observation.state,
     _file_workspace_root: fileWorkspaceRoot,
     ...(riskyMode && {
-      _create_workspace_hint: 'When bootstrapping sibling repos (e.g. ernest-mail), use create_workspace with path "ernest-mail" only—never "workspace/ernest-mail" or suffixed variants like "ernest-mail 2". Use the exact canonical name; if the workspace exists, pass allowExisting: true. For list_dir, read_file, run_command: use path "ernest-mail" (sibling dir), not "workspace/ernest-mail". run_command cwd should be the resolved project path.'
+      _create_workspace_hint: 'When bootstrapping sibling repos (e.g. ernest-mail), use create_workspace with path "ernest-mail" only—never "workspace/ernest-mail" or suffixed variants like "ernest-mail 2". Use the exact canonical name; if the workspace exists, pass allowExisting: true. For list_dir, read_file, run_command: use path "ernest-mail" (sibling dir), not "workspace/ernest-mail". run_command cwd should be the resolved project path. HEARTBEAT updates must always target the canonical file /Users/cory/Documents/Ernest Agent/workspace/HEARTBEAT.md; never create or write ernest-mail/workspace/HEARTBEAT.md.'
     })
   };
   const requestAdapter = new RequestObservationAdapter({

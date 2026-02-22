@@ -11,6 +11,7 @@ const ORIGINAL_CODEX_CWD = process.env.CODEX_CWD;
 const ORIGINAL_OPENCLAW_WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE_ROOT;
 const ORIGINAL_FILE_WORKSPACE_ROOT = process.env.FILE_WORKSPACE_ROOT;
 const ORIGINAL_RISKY_WORKSPACE_MODE = process.env.RISKY_WORKSPACE_MODE;
+const ORIGINAL_CODEX_SANDBOX_MODE = process.env.CODEX_SANDBOX_MODE;
 
 function createMockChild(stdout = '') {
   const mockChild = {
@@ -43,6 +44,7 @@ describe('CodexLLMAdapter', () => {
     delete process.env.OPENCLAW_WORKSPACE_ROOT;
     delete process.env.FILE_WORKSPACE_ROOT;
     delete process.env.RISKY_WORKSPACE_MODE;
+    delete process.env.CODEX_SANDBOX_MODE;
   });
 
   afterEach(() => {
@@ -50,6 +52,7 @@ describe('CodexLLMAdapter', () => {
     process.env.OPENCLAW_WORKSPACE_ROOT = ORIGINAL_OPENCLAW_WORKSPACE_ROOT;
     process.env.FILE_WORKSPACE_ROOT = ORIGINAL_FILE_WORKSPACE_ROOT;
     process.env.RISKY_WORKSPACE_MODE = ORIGINAL_RISKY_WORKSPACE_MODE;
+    process.env.CODEX_SANDBOX_MODE = ORIGINAL_CODEX_SANDBOX_MODE;
     while (cleanupDirs.length > 0) {
       const dir = cleanupDirs.pop();
       if (!dir) continue;
@@ -140,7 +143,7 @@ describe('CodexLLMAdapter', () => {
 
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec'],
+      ['exec', '--sandbox', 'workspace-write'],
       expect.objectContaining({ cwd: targetRoot })
     );
   });
@@ -171,7 +174,7 @@ describe('CodexLLMAdapter', () => {
 
     expect(mockedSpawn).toHaveBeenCalledWith(
       'codex',
-      ['exec'],
+      ['exec', '--sandbox', 'workspace-write'],
       expect.objectContaining({ cwd: targetRoot })
     );
   });
@@ -191,6 +194,18 @@ describe('CodexLLMAdapter', () => {
     } finally {
       process.env.CODEX_MODEL = orig;
     }
+  });
+
+  it('passes sandbox flag when configured', async () => {
+    process.env.CODEX_SANDBOX_MODE = 'workspace-write';
+    mockedSpawn.mockReturnValue(createMockChild('x') as never);
+    const adapter = new CodexLLMAdapter({ timeoutMs: 5000 });
+    await adapter.generate({ messages: [{ role: 'user', content: 'hi' }] });
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'codex',
+      ['exec', '--sandbox', 'workspace-write'],
+      expect.any(Object)
+    );
   });
 
   it('handles spawn error event', async () => {
