@@ -36,11 +36,12 @@ describe('parseUsageLimitRetryAt', () => {
     expect(parseUsageLimitRetryAt('Some other error')).toBeNull();
   });
 
-  it('parses "try again at Feb 27th, 2026 10:33 PM"', () => {
-    const raw = 'Usage limit. Try again at Feb 27th, 2026 10:33 PM.';
+  it('parses "try again at" date string', () => {
+    const futureYear = new Date().getFullYear() + 1;
+    const raw = `Usage limit. Try again at Feb 27th, ${futureYear} 10:33 PM.`;
     const d = parseUsageLimitRetryAt(raw);
     expect(d).not.toBeNull();
-    expect(d!.getFullYear()).toBe(2026);
+    expect(d!.getFullYear()).toBe(futureYear);
     expect(d!.getMonth()).toBe(1); // Feb = 1
     expect(d!.getDate()).toBe(27);
     expect(d!.getHours()).toBe(22); // 10:33 PM = 22
