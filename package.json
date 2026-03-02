@@ -25,11 +25,13 @@
     "ernest-agent": "node dist/cli/agent-tui.js",
     "ui:dev": "npm run dev --prefix ui",
     "ui:build": "npm run build --prefix ui",
-    "dev:ui": "npm run build && concurrently \"npm run dev\" \"npm run ui:dev\""
+    "dev:ui": "npm run build && concurrently \"npm run dev\" \"npm run ui:dev\"",
+    "dev:with-ernest-mail": "npm run build && concurrently -k -n ernest-mail,agent \"(cd ../ernest-mail && API_KEY=dev-key npm run dev)\" \"(ERNEST_MAIL_URL=http://127.0.0.1:3100 ERNEST_MAIL_API_KEY=dev-key npm run dev)\""
   },
   "dependencies": {
     "@inquirer/prompts": "^8.2.0",
     "fastify": "^5.7.4",
+    "fix": "^0.0.3",
     "nodemailer": "^8.0.1",
     "pg": "^8.11.5",
     "uuid": "^9.0.1",
