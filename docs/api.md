@@ -160,7 +160,8 @@ Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
 Ernest Mail integration mode:
 
 - Set `ERNEST_MAIL_URL` to route `send_email` requests to ernest-mail `POST /emails/send`.
-- When `ERNEST_MAIL_URL` is set, `ERNEST_MAIL_API_KEY` must also be set.
+- When `ERNEST_MAIL_URL` is set, `ERNEST_MAIL_API_KEY` must also be set (for admin routes: `/accounts`, agent registration).
+- `POST /emails/send` requires `X-Attestation` (TPM/FIDO2), not API key. The client must produce attestation per request. See ernest-mail `docs/ATTESTATION.md` for key rotation, failure modes, and client migration.
 - In this mode, `send_email` expects `accountId` in tool input (ernest-mail requirement).
 
 **create_test_email_account** – Creates Ethereal test account and saves config. For testing only.

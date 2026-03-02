@@ -193,7 +193,8 @@ Sends an email via SMTP. Uses credentials from env vars or the config file (popu
 Ernest Mail integration mode:
 
 - If `ERNEST_MAIL_URL` is set, this tool calls ernest-mail `POST /emails/send` instead of local SMTP/nodemailer.
-- When integration mode is enabled, `ERNEST_MAIL_API_KEY` is required and `accountId` must be provided in the tool input.
+- When integration mode is enabled, `ERNEST_MAIL_API_KEY` is required (for admin routes) and `accountId` must be provided in the tool input.
+- **Attestation**: ernest-mail requires `X-Attestation` (TPM/FIDO2) for `/emails/send`, not API key. The client must produce hardware attestation per request. See ernest-mail `docs/ATTESTATION.md` for operational docs and migration.
 - Optional `tenantId` is forwarded as `X-Tenant-Id`.
 
 **Example:** Tell the agent "Email me a summary at user@example.com" – it can call `send_email` with the summary.
