@@ -40,12 +40,7 @@ export ANTHROPIC_EMBEDDING_MODEL=...
 # Optional: export CODEX_MODEL=gpt-5.2  to override the model
 ```
 
-**Option D: Claude Code CLI**
-```bash
-# Install: brew install claude-code  # or npm install -g @anthropic-ai/claude-code
-# Run: claude auth login
-# The agent uses invoke_claude when given goals that call it
-```
+> Note: Claude Code harness integration was removed due to Anthropic policy restrictions on harness usage. Use the Anthropic API adapter (`ANTHROPIC_API_KEY`) instead of Claude Code CLI integration.
 
 See [tools/README.md](tools/README.md) for CLI setup. The server uses Codex when no API keys are set. CLI adapters use temp files (not argv) and are suitable for development; use API adapters for production with strict isolation.
 
@@ -66,6 +61,8 @@ npm run dev:ui:risky
 This profile now builds before startup, then enables risky sibling workspace mode (`/Users/cory/Documents` root), Codex writable sandbox mode, observability UI, EST/ET timestamp mode in the UI, and heartbeat execution. With heartbeat enabled, one tick is triggered immediately on startup and then continues on `HEARTBEAT_INTERVAL_MS` (default 5 min).
 
 In risky mode, Codex runs from the risky workspace root and automatically uses flags compatible with parent-directory execution (`--sandbox workspace-write`, `--skip-git-repo-check`), so it can update both sibling repos (for example `ernest-mail`) and canonical heartbeat files under `Ernest Agent/workspace`.
+
+Heartbeat archive maintenance runs automatically by default (startup + daily): set `HEARTBEAT_ARCHIVE_AUTO_SYNC=false` to disable, or tune cadence with `HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS`.
 
 ## 4. Send Requests
 
@@ -242,4 +239,4 @@ curl -s -X POST http://localhost:3000/agent/run-once \
 - [docs/api.md](docs/api.md) – Full API reference (run-once, dryRun, auth)
 - [docs/architecture.md](docs/architecture.md) – How the agent loop works
 - [docs/security.md](docs/security.md) – Security model and controls
-- [tools/README.md](tools/README.md) – invoke_codex and invoke_claude setup
+- [tools/README.md](tools/README.md) – invoke_codex and tool setup

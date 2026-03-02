@@ -6,7 +6,7 @@
 |-------|-------------|
 | Memory data | Episodic, semantic, procedural memories; user and agent context |
 | Secrets | API keys, credentials supplied via environment |
-| Tool access | Ability to execute tools (e.g., invoke_codex, invoke_claude) |
+| Tool access | Ability to execute tools (e.g., invoke_codex) |
 | Audit logs | Decisions, LLM requests, errors; may include sensitive metadata |
 
 ## Adversaries
@@ -22,7 +22,7 @@
 
 - **LLM output**: Malformed or malicious response to trigger unauthorized actions
 - **Tool execution**: Tools that read/write files, spawn processes, or make network calls
-- **CLI adapters**: Codex/Claude Code binaries; temp files; child processes
+- **CLI adapters**: Codex binary; temp files; child processes
 - **Memory poisoning**: Injected content that biases future retrieval and decisions
 - **SSRF**: Outbound requests to internal or unexpected endpoints via LLM-chosen URLs
 - **Path traversal**: File access outside workspace via crafted paths

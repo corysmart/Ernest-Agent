@@ -28,8 +28,10 @@ Enable Ernest Agent to run fully autonomously when the server is running, using 
 - `HEARTBEAT_ENABLED` – set to `true` to enable periodic heartbeat runs.
 - `HEARTBEAT_INTERVAL_MS` – interval between heartbeat runs (default 300000 = 5 min).
 - `HEARTBEAT_REFIRE_ON_PENDING` – when `true` (default), immediately re-fire another heartbeat run if HEARTBEAT.md still has unchecked tasks after a run. Set to `false` to disable.
-- `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` – cap on immediate re-fires in a row (default 5). Prevents runaway loops.
+- `HEARTBEAT_MAX_CONSECUTIVE_REFIRES` – cap on immediate re-fires in a row (default 2). Prevents runaway loops when agent does not complete tasks.
 - `HEARTBEAT_RESET_RECURRING` – when `true` (default), sections marked `## Title <!-- recurring -->` or `## Recurring` have their checkboxes unchecked when all tasks are complete, so they run again. One-time tasks stay checked.
+- `HEARTBEAT_ARCHIVE_AUTO_SYNC` – when `true` (default), server syncs heartbeat archive on startup and on interval.
+- `HEARTBEAT_ARCHIVE_SYNC_INTERVAL_MS` – archive sync interval (default `86400000`, once daily).
 - `RISKY_WORKSPACE_MODE` / `RISKY_WORKSPACE_ROOT` – for bootstrapping sibling projects (e.g. `ernest-mail` next to Ernest Agent), set `RISKY_WORKSPACE_MODE=true` and `RISKY_WORKSPACE_ROOT` to the parent directory. Then `create_workspace` with name `ernest-mail` creates at `{RISKY_WORKSPACE_ROOT}/ernest-mail`.
 
 ## Pieces (in order)
@@ -94,3 +96,4 @@ When heartbeat trigger runs:
 - Observation includes `heartbeat` key from HEARTBEAT.md.
 - Default goal title: "Process heartbeat"
 - Agent reads task list, does work (read_file, invoke_codex, etc.), writes progress back via write_file to HEARTBEAT.md or a companion file.
+- Completed tasks are archived to `HEARTBEAT_ARCHIVE.md` (grouped by project), and active `HEARTBEAT.md` stays compact with pending tasks.

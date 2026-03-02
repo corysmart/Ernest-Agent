@@ -15,7 +15,6 @@
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { pursueGoal } from './pursue-goal';
 import { invokeCodex } from './invoke-codex';
-import { invokeClaude } from './invoke-claude';
 import { sendEmail } from './send-email';
 import { scheduleTask } from './schedule-task';
 import { getRecentRuns } from './get-recent-runs';
@@ -26,6 +25,7 @@ import { listDir } from './list-dir';
 import { runCommand } from './run-command';
 import { writeFile } from './write-file';
 import { createWorkspace } from './create-workspace';
+import { syncHeartbeatArchive } from './sync-heartbeat-archive';
 
 export interface ToolDefinition {
   name: string;
@@ -132,12 +132,6 @@ export function initializeToolRegistry(): void {
   });
 
   toolRegistry.register({
-    name: 'invoke_claude',
-    handler: invokeClaude,
-    description: 'Run Claude Code CLI with a prompt. Uses Pro/Max/Teams subscription.'
-  });
-
-  toolRegistry.register({
     name: 'send_email',
     handler: sendEmail,
     description: 'Send an email. Requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM.'
@@ -191,6 +185,12 @@ export function initializeToolRegistry(): void {
     name: 'create_workspace',
     handler: createWorkspace,
     description: 'Create a new workspace directory within file workspace root. Supports risky mode for sibling project bootstrapping.'
+  });
+
+  toolRegistry.register({
+    name: 'sync_heartbeat_archive',
+    handler: syncHeartbeatArchive,
+    description: 'Rebuild HEARTBEAT_ARCHIVE.md from completed tasks and compact HEARTBEAT.md to pending items.'
   });
 
   // Add more tools here as they are created

@@ -400,6 +400,14 @@ function buildSystemPrompt(args: {
     parts.push('Put your direct reply to the user in actionPayload.response. Use actionType pursue_goal.');
     parts.push('Example: {"actionType":"pursue_goal","actionPayload":{"response":"Your actual reply text here."},"confidence":0.9,"reasoning":"Brief explanation"}');
   }
+
+  const isHeartbeatGoal = /process\s+heartbeat/i.test(sanitizedGoalTitle);
+  if (isHeartbeatGoal) {
+    parts.push('CRITICAL: For "Process heartbeat", you MUST use tool actions to execute tasks. Do NOT use pursue_goal as your first action.');
+    parts.push('Steps: 1) The observation.heartbeat (or heartbeat key in WorldState) contains HEARTBEAT.md. Identify the first unchecked task (- [ ]). 2) Use invoke_codex, run_command, read_file, or write_file to complete that task. 3) Use write_file to mark the task complete (- [x]) and append a Run Notes line. 4) Use complete_run when done or blocked.');
+    parts.push('Start with read_file, invoke_codex, or run_command—never with pursue_goal. pursue_goal is for conversational replies only.');
+  }
+
   parts.push(
     'Response format: {"actionType":"<one of allowed types>","actionPayload":{},"confidence":<0-1>,"reasoning":"<optional>"}',
     'Output ONLY the JSON object. Nothing before it, nothing after.'

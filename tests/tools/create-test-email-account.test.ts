@@ -7,6 +7,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { createTestEmailAccount } from '../../tools/create-test-email-account';
 import nodemailer from 'nodemailer';
+import * as ernestMailClient from '../../tools/ernest-mail-client';
 
 jest.mock('nodemailer', () => ({
   createTestAccount: jest.fn()
@@ -19,6 +20,7 @@ describe('create_test_email_account', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'create-test-email-'));
     process.env.EMAIL_CONFIG_PATH = join(tmpDir, 'email-config.json');
+    mockCreateTestAccount.mockClear();
     mockCreateTestAccount.mockResolvedValue({
       user: 'test@ethereal.email',
       pass: 'secret',
@@ -43,5 +45,22 @@ describe('create_test_email_account', () => {
     expect(config.user).toBeDefined();
     expect(config.pass).toBeDefined();
     expect(config.smtp?.host).toBeDefined();
+  });
+
+  it('routes to ernest-mail local-dev account when configured', async () => {
+    process.env.ERNEST_MAIL_URL = 'http://127.0.0.1:3100';
+    process.env.ERNEST_MAIL_API_KEY = 'secret';
+    const spy = jest
+      .spyOn(ernestMailClient, 'createErnestMailAccount')
+      .mockResolvedValue({ success: true, status: 201, data: { id: 'acct-1' } });
+
+    const result = await createTestEmailAccount({ email: 'agent@example.com' });
+
+    expect(result.success).toBe(true);
+    expect(spy).toHaveBeenCalledWith({
+      email: 'agent@example.com',
+      provider: 'local-dev'
+    });
+    expect(mockCreateTestAccount).not.toHaveBeenCalled();
   });
 });

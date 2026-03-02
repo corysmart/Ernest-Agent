@@ -15,6 +15,7 @@ Heartbeat safety guard:
 
 - HEARTBEAT updates must target the canonical file under `OPENCLAW_WORKSPACE_ROOT/HEARTBEAT.md`.
 - Nested paths like `<sibling-repo>/workspace/HEARTBEAT.md` are rejected by tool guards.
+- Writes to canonical `HEARTBEAT.md` auto-sync `HEARTBEAT_ARCHIVE.md` (completed tasks archived by project; active heartbeat compacted to pending tasks).
 
 ### read_file
 
@@ -67,6 +68,16 @@ Write content to a file. Used to update HEARTBEAT.md or task state.
 
 Creates parent directories if needed.
 
+### sync_heartbeat_archive
+
+Rebuilds `HEARTBEAT_ARCHIVE.md` from completed checklist items and compacts `HEARTBEAT.md` to pending tasks only.
+
+| Input | Type | Description |
+|------|------|-------------|
+| (none) | - | No input required |
+
+**Returns:** `{ success, updatedHeartbeat, updatedArchive, skipped?, reason?, error? }`
+
 ### create_workspace
 
 Creates a new workspace directory under the resolved file workspace root. Useful for starting a separate project repo.
@@ -83,9 +94,9 @@ Creates a new workspace directory under the resolved file workspace root. Useful
 
 Path segments may only contain letters, numbers, dot, dash, underscore—no spaces or suffixes like ` 2` or ` copy` (avoids duplicates from iCloud/agent re-runs). Use the exact canonical name; if the workspace exists, pass `allowExisting: true`.
 
-## CLI Tools (invoke_codex, invoke_claude)
+## CLI Tools (invoke_codex)
 
-These tools run Codex and Claude Code from the terminal, using your existing subscriptions instead of separate API keys.
+This tool runs Codex from the terminal, using your existing subscription instead of a separate API key.
 
 **Default inference:** When no `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set, the agent uses Codex as the default LLM (no API key required).
 
@@ -103,17 +114,9 @@ brew install codex
 
 Authenticate: run `codex` once and sign in with your ChatGPT account.
 
-### Claude Code CLI (Anthropic)
+### Claude Code policy note
 
-```bash
-# Homebrew (recommended on macOS)
-brew install claude-code
-
-# or npm
-npm install -g @anthropic-ai/claude-code
-```
-
-Authenticate: run `claude auth login` or set `ANTHROPIC_API_KEY`.
+Claude Code harness integration (`invoke_claude`) was removed due to Anthropic policy restrictions on harness usage. Use the Anthropic API adapter (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`) when you want Anthropic-backed inference.
 
 ## Usage
 
@@ -142,28 +145,6 @@ Risky mode Codex defaults:
 codex "Summarize this project."
 ```
 
-**invoke_claude** – `actionPayload: { prompt: "Your instruction" }`
-
-```bash
-# Equivalent terminal command
-claude "Create a Python script that prints 'Hello, world!'"
-```
-
-### invoke_claude options
-
-| Input        | Type   | Description                                  |
-|-------------|--------|----------------------------------------------|
-| prompt      | string | Main instruction (required unless promptFile) |
-| promptFile  | string | Path to file with longer instructions        |
-| systemPrompt| string | System prompt, e.g. "You are a concise coding assistant." |
-| cwd         | string | Working directory (default: process.cwd())   |
-
-Example with system prompt:
-
-```bash
-claude --system-prompt "You are a concise coding assistant." "Review this pull request"
-```
-
 ## Email and Scheduling Tools
 
 ### create_test_email_account
@@ -171,6 +152,11 @@ claude --system-prompt "You are a concise coding assistant." "Review this pull r
 Creates a disposable test email account via Ethereal. Saves credentials to `data/email-config.json` so `send_email` works immediately. **For testing only**—emails appear in Ethereal's web inbox, not real recipients.
 
 **Example:** "Set up email for testing" – the agent can call this to create an account and configure sending.
+
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool creates a `local-dev` account via ernest-mail `POST /accounts` instead of creating an Ethereal account locally.
+- Requires `ERNEST_MAIL_API_KEY` when `ERNEST_MAIL_URL` is set.
 
 ### save_email_config
 
@@ -186,6 +172,11 @@ Saves SMTP credentials to the config file so `send_email` works. Use when the us
 
 **Example:** "Save my Gmail SMTP: host smtp.gmail.com, user me@gmail.com, pass xxxx" – the agent extracts and saves.
 
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool creates/updates an SMTP-backed account via ernest-mail `POST /accounts` instead of writing local `EMAIL_CONFIG_PATH`.
+- Requires `ERNEST_MAIL_API_KEY` when `ERNEST_MAIL_URL` is set.
+
 ### send_email
 
 Sends an email via SMTP. Uses credentials from env vars or the config file (populated by `create_test_email_account` or `save_email_config`).
@@ -198,6 +189,13 @@ Sends an email via SMTP. Uses credentials from env vars or the config file (popu
 | html    | string | HTML body (optional; use with or instead of body) |
 
 **Env config:** `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (defaults to SMTP_USER).
+
+Ernest Mail integration mode:
+
+- If `ERNEST_MAIL_URL` is set, this tool calls ernest-mail `POST /emails/send` instead of local SMTP/nodemailer.
+- When integration mode is enabled, `ERNEST_MAIL_API_KEY` is required (for admin routes) and `accountId` must be provided in the tool input.
+- **Attestation**: ernest-mail requires `X-Attestation` (TPM/FIDO2) for `/emails/send`, not API key. The client must produce hardware attestation per request. See ernest-mail `docs/ATTESTATION.md` for operational docs and migration.
+- Optional `tenantId` is forwarded as `X-Tenant-Id`.
 
 **Example:** Tell the agent "Email me a summary at user@example.com" – it can call `send_email` with the summary.
 

@@ -236,9 +236,9 @@ export async function buildContainer(options: BuildContainerOptions = {}): Promi
   });
   const permissionGate = new ToolPermissionGate({
     allow: [
-      'pursue_goal', 'invoke_codex', 'invoke_claude', 'send_email', 'schedule_task', 'get_recent_runs',
+      'pursue_goal', 'invoke_codex', 'send_email', 'schedule_task', 'get_recent_runs',
       'create_test_email_account', 'save_email_config', 'read_file', 'list_dir', 'run_command', 'write_file',
-      'create_workspace',
+      'create_workspace', 'sync_heartbeat_archive',
       'complete_run'
     ]
   });

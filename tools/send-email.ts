@@ -8,6 +8,7 @@
 import nodemailer from 'nodemailer';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { loadEmailConfig } from './email-config';
+import { getErnestMailConfigFromEnv, sendViaErnestMail } from './ernest-mail-client';
 
 function getTransporter() {
   const config = loadEmailConfig();
@@ -41,8 +42,41 @@ export const sendEmail: ToolHandler = async (
   }
   const body = input.body ?? input.text ?? input.content;
   const html = input.html;
-  const config = loadEmailConfig();
-  const fromAddr = config?.from ?? process.env.EMAIL_FROM ?? process.env.SMTP_USER;
+  const textContent = typeof body === 'string' ? body : '';
+  const htmlContent = typeof html === 'string' ? html : '';
+  const hasContent = textContent.trim() || htmlContent.trim();
+  if (!hasContent) {
+    return { success: false, error: 'body (or text, content) or html is required and must be non-empty' };
+  }
+
+  const ernestMailConfig = getErnestMailConfigFromEnv();
+  if (ernestMailConfig.enabled) {
+    if (ernestMailConfig.error) {
+      return { success: false, error: ernestMailConfig.error };
+    }
+    const accountId = input.accountId ?? input.account_id;
+    if (typeof accountId !== 'string' || !accountId.trim()) {
+      return {
+        success: false,
+        error: 'accountId is required when ERNEST_MAIL_URL is configured'
+      };
+    }
+    const tenantId = input.tenantId ?? input.tenant_id;
+    const replyTo = input.replyTo ?? input.reply_to;
+    const result = await sendViaErnestMail({
+      accountId: accountId.trim(),
+      to: to.trim(),
+      subject: String(subject).trim(),
+      body: textContent.trim() || undefined,
+      html: htmlContent.trim() || undefined,
+      tenantId: typeof tenantId === 'string' ? tenantId : undefined,
+      replyTo: typeof replyTo === 'string' ? replyTo : undefined
+    });
+    if (result.success) {
+      return { success: true, status: result.status, data: result.data };
+    }
+    return { success: false, status: result.status, error: result.error ?? 'ernest-mail send failed' };
+  }
 
   const transporter = getTransporter();
   if (!transporter) {
@@ -52,12 +86,8 @@ export const sendEmail: ToolHandler = async (
     };
   }
 
-  const textContent = typeof body === 'string' ? body : '';
-  const htmlContent = typeof html === 'string' ? html : '';
-  const hasContent = textContent.trim() || htmlContent.trim();
-  if (!hasContent) {
-    return { success: false, error: 'body (or text, content) or html is required and must be non-empty' };
-  }
+  const config = loadEmailConfig();
+  const fromAddr = config?.from ?? process.env.EMAIL_FROM ?? process.env.SMTP_USER;
 
   try {
     await transporter.sendMail({

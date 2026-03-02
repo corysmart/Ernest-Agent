@@ -15,6 +15,7 @@ For `/agent/run-once`, the server creates `OpenClawWorkspaceAdapter` after reque
 | `MEMORY.md` | `memory` | Curated long-term memory |
 | `BOOTSTRAP.md` | `bootstrap` | Optional startup guidance |
 | `HEARTBEAT.md` | `heartbeat` | Optional recurring checklist |
+| `HEARTBEAT_ARCHIVE.md` | (not mapped) | Historical/completed task archive for heartbeat compaction |
 | `memory/YYYY-MM-DD.md` | `memory_YYYY_MM_DD` | Today and yesterday only when `includeDailyMemory` is enabled |
 | `skills/<name>/SKILL.md` | `skills` | Concatenated content when `includeSkills: true` |
 
@@ -86,6 +87,7 @@ Notes:
 
 - `IDENTITY.md` is provided by defaults but is not currently mapped into observations by `OpenClawWorkspaceAdapter`.
 - The installer does not create `MEMORY.md` or `memory/YYYY-MM-DD.md`; create those as needed.
+- `HEARTBEAT_ARCHIVE.md` is maintained by heartbeat archive sync logic/tooling; it is intentionally not injected into observation to keep context small.
 
 ## Server Integration
 

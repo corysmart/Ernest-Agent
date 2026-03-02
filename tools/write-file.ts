@@ -5,12 +5,17 @@
  * HEARTBEAT.md or other task state between runs.
  */
 
-import { mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import type { ToolHandler } from '../security/sandboxed-tool-runner';
 import { assertSafePath } from '../security/path-traversal';
 import { getFileWorkspaceRoot } from './file-workspace';
-import { getHeartbeatPathError } from './heartbeat-path-guard';
+import { getCanonicalHeartbeatPath, getHeartbeatPathError } from './heartbeat-path-guard';
+import {
+  buildHeartbeatArchive,
+  compactHeartbeatKeepingPending,
+  getCanonicalHeartbeatArchivePath
+} from './heartbeat-archive';
 
 export const writeFile: ToolHandler = async (
   input: Record<string, unknown>
@@ -40,9 +45,22 @@ export const writeFile: ToolHandler = async (
   }
 
   try {
+    let contentToWrite = contentStr;
+    if (resolve(targetPath) === resolve(getCanonicalHeartbeatPath())) {
+      const archivePath = getCanonicalHeartbeatArchivePath();
+      const existingArchive = existsSync(archivePath)
+        ? readFileSync(archivePath, 'utf-8')
+        : '';
+      const nextArchive = buildHeartbeatArchive(contentStr, existingArchive);
+      const compactedHeartbeat = compactHeartbeatKeepingPending(contentStr);
+      mkdirSync(dirname(archivePath), { recursive: true });
+      writeFileSync(archivePath, nextArchive, 'utf-8');
+      contentToWrite = compactedHeartbeat;
+    }
+
     const dir = dirname(targetPath);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(targetPath, contentStr, 'utf-8');
+    writeFileSync(targetPath, contentToWrite, 'utf-8');
     return { success: true };
   } catch (err) {
     return {
