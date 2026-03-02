@@ -6,8 +6,10 @@
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir as osTmpdir } from 'os';
+import { generateKeyPairSync } from 'crypto';
 import { createTestEmailAccount } from '../../tools/create-test-email-account';
 import { sendEmail } from '../../tools/send-email';
+import { sendViaErnestMail } from '../../tools/ernest-mail-client';
 import nodemailer from 'nodemailer';
 
 jest.mock('nodemailer', () => ({
@@ -139,5 +141,47 @@ describe('Agent -> ernest-mail integration flow', () => {
       body: 'World'
     });
     expect(sendResult.success).toBe(true);
+  });
+
+  it('sendViaErnestMail with attestation: lazy registers with token on 401 then retries', async () => {
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    process.env.ERNEST_MAIL_AGENT_ID = 'flow-agent';
+    process.env.ERNEST_MAIL_ATTESTATION_PRIVATE_KEY = privateKeyPem;
+    process.env.ERNEST_MAIL_REGISTRATION_TOKEN = 'integration-token';
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ agentId: 'flow-agent', format: 'tpm' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: 'sent' }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' }
+        })
+      ) as jest.MockedFunction<typeof fetch>;
+    global.fetch = fetchMock;
+
+    const result = await sendViaErnestMail({
+      accountId: 'acct-1',
+      to: 'u@example.com',
+      subject: 'Hello',
+      body: 'World'
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const selfRegBody = JSON.parse((fetchMock.mock.calls[1]?.[1] as RequestInit)?.body as string);
+    expect(selfRegBody.token).toBe('integration-token');
   });
 });
