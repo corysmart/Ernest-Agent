@@ -248,6 +248,148 @@ export async function sendViaErnestMail(
   return result;
 }
 
+async function ernestMailGetRequest<T>(
+  path: string,
+  options?: { tenantId?: string; useAttestation?: boolean }
+): Promise<ErnestMailRequestResult<T>> {
+  const config = getErnestMailConfigFromEnv();
+  if (!config.enabled) {
+    return { success: false, error: 'ERNEST_MAIL_URL is not configured' };
+  }
+  if (config.error) {
+    return { success: false, error: config.error };
+  }
+
+  const tenantId = options?.tenantId?.trim();
+  const useAttestation = options?.useAttestation ?? Boolean(config.attestation);
+  const headers: Record<string, string> = {};
+
+  if (useAttestation && config.attestation) {
+    headers['X-Attestation'] = createTpmAttestation({
+      method: 'GET',
+      path,
+      body: undefined,
+      tenantId: tenantId || undefined,
+      privateKeyPem: config.attestation.privateKeyPem
+    });
+  } else {
+    headers['Authorization'] = `ApiKey ${config.apiKey as string}`;
+  }
+  if (tenantId) {
+    headers['X-Tenant-Id'] = tenantId;
+  }
+
+  try {
+    const response = await fetch(`${config.baseUrl as string}${path}`, {
+      method: 'GET',
+      headers
+    });
+    const responseBody = await parseResponseBody(response);
+    if (response.ok) {
+      return { success: true, status: response.status, data: responseBody as T };
+    }
+    return {
+      success: false,
+      status: response.status,
+      error: getErrorMessage(response.status, response.statusText, responseBody),
+      data: responseBody as T
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+export interface ReceivedEmailListResponse {
+  object?: 'list';
+  has_more?: boolean;
+  data?: Array<{
+    id: string;
+    to: string[];
+    from: string;
+    created_at: string;
+    subject: string;
+    attachments?: Array<{ id: string; filename: string; content_type: string }>;
+  }>;
+}
+
+export interface ReceivedEmailFullResponse {
+  id: string;
+  to: string[];
+  from: string;
+  created_at: string;
+  subject: string;
+  html?: string | null;
+  text?: string | null;
+  headers?: Record<string, string>;
+  attachments?: Array<{ id: string; filename: string; content_type: string }>;
+}
+
+/** List received emails from ernest-mail (Resend Inbound). Attestation required. */
+export async function listReceivedEmailsViaErnestMail(options?: {
+  limit?: number;
+  after?: string;
+  before?: string;
+  tenantId?: string;
+}): Promise<ErnestMailRequestResult<ReceivedEmailListResponse>> {
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(Math.min(100, Math.max(1, options.limit))));
+  if (options?.after) params.set('after', options.after);
+  if (options?.before) params.set('before', options.before);
+  const qs = params.toString();
+  const path = qs ? `/emails/received?${qs}` : '/emails/received';
+  const result = await ernestMailGetRequest<ReceivedEmailListResponse>(path, {
+    tenantId: options?.tenantId,
+    useAttestation: true
+  });
+  if (
+    result.success === false &&
+    result.status === 401 &&
+    getErnestMailConfigFromEnv().registrationToken
+  ) {
+    const regResult = await registerErnestMailAgent();
+    if (regResult.success) {
+      return ernestMailGetRequest<ReceivedEmailListResponse>(path, {
+        tenantId: options?.tenantId,
+        useAttestation: true
+      });
+    }
+  }
+  return result;
+}
+
+/** Get a single received email by ID from ernest-mail. Attestation required. */
+export async function getReceivedEmailViaErnestMail(
+  emailId: string,
+  tenantId?: string
+): Promise<ErnestMailRequestResult<ReceivedEmailFullResponse>> {
+  const id = typeof emailId === 'string' ? emailId.trim() : '';
+  if (!id) {
+    return { success: false, error: 'emailId is required' };
+  }
+  const path = `/emails/received/${encodeURIComponent(id)}`;
+  const result = await ernestMailGetRequest<ReceivedEmailFullResponse>(path, {
+    tenantId,
+    useAttestation: true
+  });
+  if (
+    result.success === false &&
+    result.status === 401 &&
+    getErnestMailConfigFromEnv().registrationToken
+  ) {
+    const regResult = await registerErnestMailAgent();
+    if (regResult.success) {
+      return ernestMailGetRequest<ReceivedEmailFullResponse>(path, {
+        tenantId,
+        useAttestation: true
+      });
+    }
+  }
+  return result;
+}
+
 /** Self-register agent with ernest-mail. Requires token + key proof. Call once before sending, or lazy on first send. */
 export async function registerErnestMailAgent(): Promise<ErnestMailRequestResult> {
   const config = getErnestMailConfigFromEnv();

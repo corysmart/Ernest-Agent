@@ -21,6 +21,7 @@ import { getRecentRuns } from './get-recent-runs';
 import { createTestEmailAccount } from './create-test-email-account';
 import { saveEmailConfigTool } from './save-email-config';
 import { readFile } from './read-file';
+import { readEmail } from './read-email';
 import { listDir } from './list-dir';
 import { runCommand } from './run-command';
 import { writeFile } from './write-file';
@@ -165,6 +166,11 @@ export function initializeToolRegistry(): void {
     name: 'read_file',
     handler: readFile,
     description: 'Read file contents from workspace. Path relative to FILE_WORKSPACE_ROOT or CODEX_CWD.'
+  });
+  toolRegistry.register({
+    name: 'read_email',
+    handler: readEmail,
+    description: 'List or read received emails via ernest-mail (Resend Inbound). Use action=list (default) or action=get with id. Requires ERNEST_MAIL_URL and attestation.'
   });
   toolRegistry.register({
     name: 'list_dir',
