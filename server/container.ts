@@ -19,6 +19,7 @@ import { LocalLLMAdapter } from '../llm/adapters/local-adapter';
 import { resolve } from 'path';
 import { homedir } from 'os';
 import { CodexLLMAdapter } from '../llm/adapters/codex-adapter';
+import { AzureOpenAIAdapter } from '../llm/adapters/azure-openai-adapter';
 import type { LLMAdapter } from '../core/contracts/llm';
 import type { EmbeddingProvider } from '../memory/memory-manager';
 
@@ -303,6 +304,9 @@ function inferLlmProvider(): string {
   if (process.env.OPENAI_API_KEY) {
     return 'openai';
   }
+  if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
+    return 'azure';
+  }
   if (process.env.ANTHROPIC_API_KEY) {
     return 'anthropic';
   }
@@ -334,6 +338,17 @@ async function buildLlmAdapter(options: BuildContainerOptions = {}): Promise<LLM
       model,
       embeddingModel,
       baseUrl,
+      resolveDns
+    });
+  }
+
+  if (provider === 'azure') {
+    return await AzureOpenAIAdapter.create({
+      apiKey: requireEnv('AZURE_OPENAI_API_KEY'),
+      endpoint: requireEnv('AZURE_OPENAI_ENDPOINT'),
+      deployment: requireEnv('AZURE_OPENAI_DEPLOYMENT'),
+      embeddingDeployment: requireEnv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT'),
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION,
       resolveDns
     });
   }
@@ -404,6 +419,17 @@ async function buildEmbeddingProvider(llmAdapter: LLMAdapter, options: BuildCont
     const embeddingModel = requireEnv('OPENAI_EMBEDDING_MODEL');
     const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
     return await OpenAIAdapter.create({ apiKey, model, embeddingModel, baseUrl, resolveDns });
+  }
+
+  if (provider === 'azure') {
+    return await AzureOpenAIAdapter.create({
+      apiKey: requireEnv('AZURE_OPENAI_API_KEY'),
+      endpoint: requireEnv('AZURE_OPENAI_ENDPOINT'),
+      deployment: requireEnv('AZURE_OPENAI_DEPLOYMENT'),
+      embeddingDeployment: requireEnv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT'),
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION,
+      resolveDns
+    });
   }
 
   if (provider === 'anthropic') {

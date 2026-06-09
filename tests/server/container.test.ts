@@ -15,6 +15,11 @@ describe('buildContainer embedding configuration', () => {
     delete process.env.OPENAI_MODEL;
     delete process.env.OPENAI_EMBEDDING_MODEL;
     delete process.env.LLM_PROVIDER;
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_OPENAI_ENDPOINT;
+    delete process.env.AZURE_OPENAI_DEPLOYMENT;
+    delete process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT;
+    delete process.env.AZURE_OPENAI_API_VERSION;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_EMBEDDING_MODEL;
     delete process.env.ANTHROPIC_EMBEDDING_API_KEY;
@@ -40,6 +45,21 @@ describe('buildContainer embedding configuration', () => {
     const containerContext = await buildContainer();
     const llmAdapter = containerContext.container.resolve<LLMAdapter>('llmAdapter');
     expect(llmAdapter).toBeInstanceOf(CodexLLMAdapter);
+    await containerContext.cleanup();
+  });
+
+  it('uses Azure OpenAI when azure env vars are set', async () => {
+    const { AzureOpenAIAdapter } = await import('../../llm/adapters/azure-openai-adapter');
+    process.env.LLM_PROVIDER = 'azure';
+    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
+    process.env.AZURE_OPENAI_ENDPOINT = 'https://my-resource.openai.azure.com';
+    process.env.AZURE_OPENAI_DEPLOYMENT = 'gpt-4o-mini';
+    process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT = 'text-embedding-3-small';
+    process.env.SSRF_RESOLVE_DNS = 'false';
+
+    const containerContext = await buildContainer({ resolveDns: false });
+    const llmAdapter = containerContext.container.resolve<LLMAdapter>('llmAdapter');
+    expect(llmAdapter).toBeInstanceOf(AzureOpenAIAdapter);
     await containerContext.cleanup();
   });
 
