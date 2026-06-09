@@ -25,14 +25,24 @@ export OPENAI_MODEL=gpt-4o-mini
 export OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-**Option B: Anthropic (API)**
+**Option B: Azure OpenAI**
+```bash
+export LLM_PROVIDER=azure
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
+export AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+# Optional: export AZURE_OPENAI_API_VERSION=2024-10-21
+```
+
+**Option C: Anthropic (API)**
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 export ANTHROPIC_MODEL=claude-3-5-haiku-20241022
 export ANTHROPIC_EMBEDDING_MODEL=...
 ```
 
-**Option C: Codex CLI (no API key)**
+**Option D: Codex CLI (no API key)**
 ```bash
 # Install: npm install -g @openai/codex
 # Run codex once to authenticate
